@@ -332,6 +332,7 @@ int id_map::get_new_id(char const *name)
   }
 
 id_map node_mapper;
+id_map job_mapper;
 
 struct pbsnode *tfind_addr(
 

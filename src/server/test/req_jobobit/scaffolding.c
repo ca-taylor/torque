@@ -19,6 +19,7 @@
 #include "array.h" /* ArrayEventsEnum */
 #include "pbs_nodes.h" /* pbsnode */
 #include "queue.h" /* pbs_queue */
+#include "id_map.hpp"
 
 
 
@@ -194,7 +195,7 @@ int svr_setjobstate(job *pjob, int newstate, int newsubstate, int  has_queue_mut
   return(0);
   }
 
-job *svr_find_job(char *jobid, int get_subjob)
+job *svr_find_job(const char *jobid, int get_subjob)
   {
   job *pjob = NULL;
 
@@ -281,7 +282,7 @@ struct pbsnode *find_nodebyname(
 
 int kill_job_on_mom(
 
-  char           *jobid,
+  int             internal_job_id,
   struct pbsnode *pnode)
 
   {
@@ -325,3 +326,12 @@ void log_record(int eventtype, int objclass, const char *objname, const char *te
 void account_jobend(job *pjob, char *used) {}
 
 void update_array_values(job_array *pa, int old_state, enum ArrayEventsEnum event, char *job_id, long job_atr_hold, int job_exit_status) {}
+
+id_map::id_map() {}
+
+const char *id_map::get_name(int id)
+  {
+  return(NULL);
+  }
+
+id_map job_mapper;

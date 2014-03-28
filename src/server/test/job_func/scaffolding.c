@@ -3,6 +3,7 @@
 #include <stdio.h> /* fprintf */
 #include <pthread.h>
 #include <errno.h>
+#include <string>
 
 #include "pbs_ifl.h" /* MAXPATHLEN, PBS_MAXSERVERNAME */
 #include "server.h" /* server, NO_BUFFER_SPACE */
@@ -13,7 +14,7 @@
 #include "batch_request.h" /* batch_request */
 #include "work_task.h" /* all_tasks */
 #include "array.h" /* ArrayEventsEnum */
-#include <string>
+#include "id_map.hpp"
 
 /* This section is for manipulting function return values */
 #include "test_job_func.h" /* *_SUITE */
@@ -500,7 +501,7 @@ int unlock_ai_mutex(job_array *pa, const char *func_id, const char *msg, int log
   return(0);
   }
 
-job *svr_find_job(char *jobid, int sub)
+job *svr_find_job(const char *jobid, int sub)
   {
   return(NULL);
   }
@@ -591,3 +592,12 @@ job *find_job_by_array(
 
   return(pj);
   } /* END find_job_by_array() */
+
+id_map::id_map() {}
+
+int id_map::get_new_id(const char *id) 
+  {
+  return(-1);
+  }
+
+id_map job_mapper;
