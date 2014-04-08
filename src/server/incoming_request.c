@@ -130,13 +130,13 @@ int process_pbs_server_port(
       // always close the socket for is requests 
       rc = PBSE_SOCKET_CLOSE;
 
-      is_request_info *isr = (is_request_info *)calloc(1, sizeof(is_request_info));
+      is_request_info isr;
 
-      isr->chan = chan;
-      isr->args = args;
+      isr.chan = chan;
+      isr.args = args;
   
       if (threadpool_is_too_busy(request_pool, ATR_DFLAG_MGRD) == false)
-        svr_is_request(isr);
+        svr_is_request(&isr);
       else
         write_tcp_reply(chan, IS_PROTOCOL, IS_PROTOCOL_VER, IS_STATUS, PBSE_SERVER_BUSY);
 
