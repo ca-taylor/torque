@@ -1015,6 +1015,10 @@ int req_quejob(
         (((pj->ji_wattr[JOB_ATR_outpath].at_val.at_str[strlen(pj->ji_wattr[JOB_ATR_outpath].at_val.at_str) - 1] == ':'))))
       {
       std::string ds = "";
+
+      if (pj->ji_wattr[JOB_ATR_outpath].at_val.at_str != NULL)
+        free(pj->ji_wattr[JOB_ATR_outpath].at_val.at_str);
+
       pj->ji_wattr[JOB_ATR_outpath].at_val.at_str = strdup(prefix_std_file(pj, ds, (int)'o'));
       pj->ji_wattr[JOB_ATR_outpath].at_flags |= ATR_VFLAG_SET;
       }
@@ -1065,6 +1069,10 @@ int req_quejob(
         (((pj->ji_wattr[JOB_ATR_errpath].at_val.at_str[strlen(pj->ji_wattr[JOB_ATR_errpath].at_val.at_str) - 1] == ':'))))
       {
       std::string ds = "";
+
+      if (pj->ji_wattr[JOB_ATR_errpath].at_val.at_str != NULL)
+        free(pj->ji_wattr[JOB_ATR_errpath].at_val.at_str);
+
       pj->ji_wattr[JOB_ATR_errpath].at_val.at_str = strdup(prefix_std_file(pj, ds, (int)'e'));
       pj->ji_wattr[JOB_ATR_errpath].at_flags |= ATR_VFLAG_SET;
       }
