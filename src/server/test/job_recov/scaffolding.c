@@ -336,6 +336,10 @@ id_map::id_map()
   {
   }
 
+id_map::~id_map() 
+  {
+  }
+
 int id_map::get_new_id(const char *job_name)
   {
   static int id = 0;

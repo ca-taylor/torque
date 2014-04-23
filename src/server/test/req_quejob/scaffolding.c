@@ -413,6 +413,11 @@ job *find_job_by_array(all_jobs *aj, char *jobid, int get_subjob, bool locked)
 
 id_map::id_map() {}
 
+id_map::~id_map() 
+  {
+  }
+
+
 int id_map::get_new_id(const char *job_name)
   {
   static int i = 0;

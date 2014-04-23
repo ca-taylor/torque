@@ -65,6 +65,11 @@ id_map::id_map()
   {
   }
 
+id_map::~id_map() 
+  {
+  }
+
+
 const char *id_map::get_name(int id)
   {
   return(NULL);

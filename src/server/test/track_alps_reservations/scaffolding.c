@@ -122,6 +122,11 @@ job *svr_find_job_by_id(int id)
 
 id_map::id_map() {}
 
+id_map::~id_map() 
+  {
+  }
+
+
 const char *id_map::get_name(int id)
   {
   return(NULL);

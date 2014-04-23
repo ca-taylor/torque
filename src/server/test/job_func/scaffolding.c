@@ -595,6 +595,11 @@ job *find_job_by_array(
 
 id_map::id_map() {}
 
+id_map::~id_map() 
+  {
+  }
+
+
 int id_map::get_new_id(const char *id) 
   {
   return(-1);

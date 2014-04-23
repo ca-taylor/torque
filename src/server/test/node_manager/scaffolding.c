@@ -602,6 +602,11 @@ const char *id_map::get_name(int id)
     }
   }
 
+id_map::~id_map() 
+  {
+  }
+
+
 id_map node_mapper;
 id_map job_mapper;
 

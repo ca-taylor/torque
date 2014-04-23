@@ -333,6 +333,11 @@ void update_array_values(job_array *pa, int old_state, enum ArrayEventsEnum even
 
 id_map::id_map() {}
 
+id_map::~id_map() 
+  {
+  }
+
+
 const char *id_map::get_name(int id)
   {
   return(NULL);
