@@ -117,7 +117,7 @@ extern int  reply_jid(char *);
 extern int  svr_authorize_jobreq(struct batch_request *, job *);
 int         reply_send_mom(struct batch_request *request);
 extern void check_state(int);
-extern void mom_server_all_update_stat();
+extern void *mom_server_all_update_stat(void *);
 void        send_update_soon();
 #ifdef NVIDIA_GPUS
 extern int  use_nvidia_gpu;

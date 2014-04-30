@@ -98,19 +98,19 @@
 
 /* sync w/dis_emsg[] (lib/Libdis/dis.c) */
 
-#define DIS_SUCCESS 0 /* No error */
-#define DIS_OVERFLOW 1 /* Value too large to convert */
-#define DIS_HUGEVAL 2 /* Tried to write floating point infinity */
-#define DIS_BADSIGN 3 /* Negative sign on an unsigned datum */
-#define DIS_LEADZRO 4 /* Input count or value has leading zero */
-#define DIS_NONDIGIT 5 /* Non-digit found where a digit was expected */
-#define DIS_NULLSTR 6 /* String read has an embedded ASCII NUL */
-#define DIS_EOD  7 /* Premature end of message */
-#define DIS_NOMALLOC 8 /* Unable to malloc space for string */
-#define DIS_PROTO       9 /* Supporting protocol failure */
-#define DIS_NOCOMMIT 10 /* Protocol failure in commit */
-#define DIS_EOF  11 /* End of File */
-#define DIS_INVALID 12 /* Invalid condition in code*/
+#define DIS_SUCCESS 0     /* No error */
+#define DIS_OVERFLOW 1    /* Value too large to convert */
+#define DIS_HUGEVAL 2     /* Tried to write floating point infinity */
+#define DIS_BADSIGN 3     /* Negative sign on an unsigned datum */
+#define DIS_LEADZRO 4     /* Input count or value has leading zero */
+#define DIS_NONDIGIT 5    /* Non-digit found where a digit was expected */
+#define DIS_NULLSTR 6     /* String read has an embedded ASCII NUL */
+#define DIS_EOD  7        /* Premature end of message */
+#define DIS_NOMALLOC 8    /* Unable to malloc space for string */
+#define DIS_PROTO    9    /* Supporting protocol failure */
+#define DIS_NOCOMMIT 10   /* Protocol failure in commit */
+#define DIS_EOF  11       /* End of File */
+#define DIS_INVALID 12    /* Invalid condition in code*/
 
 
 unsigned long disrul (struct tcp_chan *chan, int *retval);

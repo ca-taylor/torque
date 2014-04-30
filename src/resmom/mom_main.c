@@ -88,6 +88,9 @@
 #include "mom_job_cleanup.h"
 
 #include "mcom.h"
+#if defined(NVIDIA_GPUS) && defined(NVML_API)
+#include "nvml.h"
+#endif  /* NVIDIA_GPUS and NVML_API */
 #include "mom_server_lib.h" /* shutdown_to_server */
 
 #ifdef NOPOSIXMEMLOCK
@@ -116,6 +119,7 @@ int    MOMIsPLocked = 0;
 int    ServerStatUpdateInterval = DEFAULT_SERVER_STAT_UPDATES;
 int    CheckPollTime            = CHECK_POLL_TIME;
 int    ForceServerUpdate = 0;
+int    FatalJobPollFailure = 1;
 
 int    verbositylevel = 0;
 double cputfactor = 1.00;
@@ -267,6 +271,7 @@ char            xauth_path[MAXPATHLEN];
 
 time_t          LastServerUpdateTime = 0;  /* NOTE: all servers updated together */
 int             UpdateFailCount = 0;
+pthread_mutex_t statusUpdateMutex;
 
 time_t          MOMStartTime         = 0;
 int             MOMPrologTimeoutCount;
@@ -298,7 +303,7 @@ void            resend_things();
 extern void     add_resc_def(char *, char *);
 extern void     mom_server_all_diag(std::stringstream &output);
 extern void     mom_server_all_init(void);
-extern void     mom_server_all_update_stat(void);
+extern void     *mom_server_all_update_stat(void *);
 extern void     mom_server_all_update_gpustat(void);
 extern int      mark_for_resend(job *);
 extern int      mom_server_add(const char *name);
@@ -396,6 +401,7 @@ extern unsigned long mom_checkpoint_set_checkpoint_run_exe_name(const char *);
 static unsigned long setdownonerror(const char *);
 static unsigned long setstatusupdatetime(const char *);
 static unsigned long setcheckpolltime(const char *);
+static unsigned long setfataljobpollfailure(const char *);
 static unsigned long settmpdir(const char *);
 static unsigned long setlogfilemaxsize(const char *);
 static unsigned long setlogfilerolldepth(const char *);
@@ -480,6 +486,7 @@ static struct specials
   { "down_on_error",       setdownonerror },
   { "status_update_time",  setstatusupdatetime },
   { "check_poll_time",     setcheckpolltime },
+  { "fatal_job_poll_failure", setfataljobpollfailure }, 
   { "tmpdir",              settmpdir },
   { "log_directory",       setlogdirectory },
   { "log_file_max_size",   setlogfilemaxsize },
@@ -2108,6 +2115,59 @@ static u_long setdownonerror(
 
   return(1);
   }  /* END setdownonerror() */
+
+
+
+static u_long setfataljobpollfailure(
+
+  const char *Value)  /* I */
+
+  {
+  static char   id[] = "setfataljobpollfailure";
+  int           enable = -1;
+
+  log_record(PBSEVENT_SYSTEM,PBS_EVENTCLASS_SERVER,id,Value);
+
+  if (Value == NULL)
+    {
+    /* FAILURE */
+
+    return(0);
+    }
+
+  /* accept various forms of "true", "yes", and "1" */
+  switch (Value[0])
+    {
+    case 't':
+    case 'T':
+    case 'y':
+    case 'Y':
+    case '1':
+
+      enable = 1;
+    
+      break;
+
+  /* accept various forms of "false", "no", and "0" */
+    case 'f':
+    case 'F':
+    case 'n':
+    case 'N':
+    case '0':
+
+      enable = 0;
+    
+      break;
+
+    }
+
+  if (enable != -1)
+    {
+    FatalJobPollFailure = enable;
+    }
+
+  return(1);
+  }  /* END setfataljobpollfailure() */
 
 
 
@@ -5485,6 +5545,25 @@ void set_report_check_poll_time(
   } /* set_report_check_poll_time() */
 
 
+/*
+ *  * set_report_fatal_job_poll_failure()
+ *  * @pre-cond: curr points to a valid character pointer
+ *  */
+
+void set_report_fatal_job_poll_failure(
+
+  std::stringstream &output,
+  char              *curr)
+
+  {
+  if ((*curr == '=') && ((*curr) + 1 != '\0'))
+    {
+    setfataljobpollfailure(curr+1);
+    }
+
+  output << "fatal_job_poll_failure=" << FatalJobPollFailure;
+  } /* set_report_fatal_job_poll_failure() */
+
 
 /*
  * set_report_job_start_block_time()
@@ -5779,6 +5858,10 @@ int process_rm_cmd_request(
       else if (!strncasecmp(name, "check_poll_time", strlen("check_poll_time")))
         {
         set_report_check_poll_time(output, curr);
+        }
+      else if (!strncasecmp(name, "fatal_job_poll_failure", strlen("fatal_job_poll_failure")))
+        {
+        set_report_fatal_job_poll_failure(output, curr);
         }
       else if (!strncasecmp(name, "jobstartblocktime", strlen("jobstartblocktime")))
         {
@@ -7870,6 +7953,9 @@ int setup_program_environment(void)
 
   /* initialize the network interface */
 
+  snprintf(log_buffer, sizeof(log_buffer), "Initializing network for PBS_MOM_PORT (%u)", pbs_mom_port);
+  log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_SERVER, __func__, log_buffer);
+
   if (init_network(pbs_mom_port, mom_process_request) != 0)
     {
     c = errno;
@@ -7890,6 +7976,9 @@ int setup_program_environment(void)
 
     return(3);
     }
+
+  snprintf(log_buffer, sizeof(log_buffer), "Initializing network for PBS_RM_PORT (%u)", pbs_rm_port);
+  log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_SERVER, __func__, log_buffer);
 
   if (init_network(pbs_rm_port, tcp_request) != 0)
     {
@@ -9098,7 +9187,6 @@ void prepare_child_tasks_for_delete()
  */
 
 void main_loop(void)
-
   {
   extern time_t wait_time;
   double        myla;
@@ -9106,6 +9194,12 @@ void main_loop(void)
 #ifdef USESAVEDRESOURCES
   int           check_dead = TRUE;
 #endif    /* USESAVEDRESOURCES */
+
+  int              rc;
+  pthread_t        tid;
+  pthread_attr_t   attr;
+  void             *status;
+  char             log_buf[LOCAL_LOG_BUF_SIZE];
 
   mom_run_state = MOM_RUN_STATE_RUNNING;  /* mom_run_state is altered by stop_me() or MOMCheckRestart() */
 
@@ -9139,7 +9233,26 @@ void main_loop(void)
       }
 
     /* check for what needs to be sent is now done within */
-    mom_server_all_update_stat();
+    //(void *) mom_server_all_update_stat(NULL);
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    rc = pthread_create(&tid, &attr, mom_server_all_update_stat, NULL);
+    if (rc) {
+      snprintf(log_buf, sizeof(log_buf), "ERROR: pthread_create(), rc =  %d", rc);
+      log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE, __func__, log_buf);
+    }
+    pthread_attr_destroy(&attr);
+    rc = pthread_join(tid, &status);
+    if (rc) {
+      snprintf(log_buf, sizeof(log_buf), "ERROR: pthread_join(), rc =  %d", rc);
+      log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE, __func__, log_buf);
+    }
+    else {
+      if ( LOGLEVEL > 6 ) {
+        snprintf(log_buf, sizeof(log_buf), "Completed join with thread %ld, status = %ld", tid, (long) status);
+        log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE, __func__, log_buf);
+      }
+    }
 
     /* if needed, update server with my state change */
     /* can be changed in check_busy(), query_adp(), and update_stat() */

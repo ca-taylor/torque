@@ -131,6 +131,11 @@ void *mom_process_request(
   int                   sfds = *(int *)sock_num;
   struct tcp_chan *chan = NULL;
 
+
+
+  snprintf(log_buffer, sizeof(log_buffer), "sfds/socknum = %d", sfds);
+  log_event(PBSEVENT_DEBUG, PBS_EVENTCLASS_REQUEST, __func__,  log_buffer);
+
   time_now = time(NULL);
 
   if ((request = alloc_br(0)) == NULL)
@@ -150,6 +155,10 @@ void *mom_process_request(
     }
 
   /* Read in the request and decode it to the internal request structure.  */
+
+  snprintf(log_buffer, sizeof(log_buffer), "Reading DIS Request on Chan @ %p, chan.sock = %d", chan, chan->sock);
+  log_event(PBSEVENT_DEBUG, PBS_EVENTCLASS_REQUEST, __func__,  log_buffer);
+
   rc = dis_request_read(chan, request);
 
   if (rc == -1)

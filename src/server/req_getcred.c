@@ -255,21 +255,23 @@ int write_munge_temp_file(
   char                 *mungeFileName) /* I */
 
   {
-  int fd;
-  int cred_size;
-  int bytes_written;
-  int rc;
-
-  if ((fd = open(mungeFileName, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)) < 0)
-    {
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, "could not create temporary munge file");
-    return(-1);
-    }
+  int  fd;
+  int  cred_size;
+  int  bytes_written;
+  int  rc;
+  char log_buf[LOCAL_LOG_BUF_SIZE];
 
   if ((cred_size = strlen(preq->rq_ind.rq_authen.rq_cred)) == 0)
     {
     req_reject(PBSE_BADCRED, 0, preq, NULL, "munge credential invalid");
-    close(fd);
+    return(-1);
+    }
+
+  if ((fd = open(mungeFileName, O_WRONLY|O_NONBLOCK)) < 0)
+    {
+    sprintf(log_buf, "could not open temporary munge file %s, errno = %d", 
+	    mungeFileName, errno);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
     return(-1);
     }
 
@@ -278,16 +280,21 @@ int write_munge_temp_file(
   if ((bytes_written == -1) || 
       (bytes_written != cred_size))
     {
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, "could not write credential to temporary munge file");
+    sprintf(log_buf, "could not write credential to temporary munge file %s, errno = %d, bytes_written = %d", 
+	    mungeFileName, errno, bytes_written);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
     close(fd);
     return(-1);
     }
 
-	if ((rc = fsync(fd)) < 0)
-		{
-		close(fd);
-		return(rc);
-		}
+  if ((rc = fsync(fd)) < 0)
+    {
+    sprintf(log_buf, "could not fsync temporary munge file %s, errno = %d", 
+	    mungeFileName, errno);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
+    close(fd);
+    return(rc);
+    }
 
   close(fd);
 
@@ -314,7 +321,9 @@ int pipe_and_read_unmunge(
   int   total_bytes_read = 0;
   int   fd;
   int   rc;
-  
+  int   errno_save = 0;
+  int   flags = 0;
+
   snprintf(munge_command,sizeof(munge_command),
     "unmunge --input=%s",
     mungeFileName);
@@ -336,19 +345,62 @@ int pipe_and_read_unmunge(
   ptr = munge_buf;
   
   fd = fileno(munge_pipe);
-  
+  if (fd == -1)
+    {
+    sprintf(log_buf, "invalid stream for unmunge pipe, errno = %d", errno);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
+    return(-1);
+    }
+
+  if ((flags = fcntl(fd, F_GETFL)) == -1)
+    {
+    sprintf(log_buf, "cannot get file status flags for unmunge of %s, errno = %d", 
+	    mungeFileName, errno);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
+    return(-1);
+    }
+
+#if defined(FNDELAY) && !defined(__hpux)
+  if (flags & FNDELAY)
+#else
+  if (flags & O_NONBLOCK)
+#endif
+    {
+      /* flags already set */
+      /* NO-OP */
+    }
+  else
+    {
+#if defined(FNDELAY) && !defined(__hpux)
+    flags |= FNDELAY;
+#else
+    flags |= O_NONBLOCK;
+#endif
+    if (fcntl(fd,F_SETFL,flags) == -1)
+      {
+      sprintf(log_buf, "cannot set file status flags to %d for unmunge of %s, errno = %d", 
+	      flags, mungeFileName, errno);
+      req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
+      return(-1);
+      }
+    }
+
   while ((bytes_read = read_ac_socket(fd, ptr, MUNGE_SIZE)) > 0)
     {
     total_bytes_read += bytes_read;
     ptr += bytes_read;
     }
-  
+
+  errno_save = errno;
+
   pclose(munge_pipe);
   
   if (bytes_read == -1)
     {
     /* read failed */
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, "error reading unmunge data");
+    sprintf(log_buf, "error reading munge data from %s, errno = %d", 
+	    mungeFileName, errno_save);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
     rc = -1;
     }
   else if (total_bytes_read == 0)
@@ -358,14 +410,22 @@ int pipe_and_read_unmunge(
      * Bad credential gives us ECHILD error which gets added to log message
      * and confuses users, so reset it to zero show it does not show up in log
      */
+    int tmp = errno;
     if (errno == ECHILD)
       errno = 0;
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, "could not unmunge credentials");
+    sprintf(log_buf, "could not unmunge credentials, munge_command=|%s|, errno=%d, last bytes_read=%d, errno_save=%d, flags=%d", 
+	    munge_command, tmp, bytes_read, errno_save, flags);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
     rc = -1;
     }
   else if ((rc = get_encode_host(sock, munge_buf, preq)) == PBSE_NONE)
     {
     rc = get_UID(sock, munge_buf, preq);
+    }
+  else
+    {
+    sprintf(log_buf, "get_encode_host returned %d", rc);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
     }
 
   return(rc);
@@ -381,32 +441,53 @@ int unmunge_request(
   struct batch_request *preq) /* M */
  
   {
-  time_t          myTime;
-  struct timeval  tv;
-  suseconds_t     millisecs;
-  struct tm       timeinfo;
   char            mungeFileName[MAXPATHLEN + MAXNAMLEN+1];
   int             rc = PBSE_NONE;
+  char            log_buf[LOCAL_LOG_BUF_SIZE];
+  int             fd;
 
-  /* create a sudo random file name */
-  gettimeofday(&tv, NULL);
-  myTime = tv.tv_sec;
-  /* FIXME: use localtime_r */
-  localtime_r(&myTime, &timeinfo);
-  millisecs = tv.tv_usec;
-  sprintf(mungeFileName, "%smunge-%d-%d-%d-%d", 
-	  path_credentials, timeinfo.tm_hour, timeinfo.tm_min, 
-	  timeinfo.tm_sec, (int)millisecs);
+  /* create a unique temporary file for the credential data */
+  sprintf(mungeFileName, "%smunge-XXXXXX", path_credentials);
+  fd = mkstemp(mungeFileName);
+  if (fd == -1)
+    {
+    sprintf(log_buf, "could not create temporary munge file %s, errno=%d", 
+	    mungeFileName, errno);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
+    return(-1);
+    }
+
+  rc = close(fd);
+  if (rc == -1)
+    {
+    sprintf(log_buf, "could not close temporary munge file %s, errno=%d", 
+	    mungeFileName, errno);
+    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
+    return(-1);
+    }
 
   /* Write the munge credential to the newly created file */
   if ((rc = write_munge_temp_file(preq,mungeFileName)) == PBSE_NONE)
     {
     /* open the munge command as a pipe and read the result */
     rc = pipe_and_read_unmunge(mungeFileName,preq,sock);
+    if (rc < 0)
+      {
+      sprintf(log_buf, "Error reading munge temp file %s, rc=%d", 
+	      mungeFileName, rc);
+      log_err(-1, __func__, log_buf);
+      }
     }
-  
-  /* delete the old file */
-  unlink(mungeFileName);
+  else
+    {
+      sprintf(log_buf, "Error writing to munge temp file %s, rc=%d", 
+	      mungeFileName, rc);
+      log_err(-1, __func__, log_buf);
+    }
+
+  /* delete the old file unless we had a problem */
+  if (rc >= 0)
+    unlink(mungeFileName);
 
   return(rc);
   } /* END unmunge_request */
@@ -472,7 +553,8 @@ int req_authenuser(
 #endif
       pthread_mutex_unlock(svr_conn[s].cn_mutex);
   
-      if (preq->rq_ind.rq_authen.rq_port != conn_port)
+      if (preq->rq_ind.rq_authen.rq_port != conn_port || 
+	  svr_conn[preq->rq_conn].cn_addr != conn_addr)
         continue;
 
       if (conn_addr != incoming_conn_addr)
@@ -543,6 +625,7 @@ int req_altauthenuser(
   int s;
   int rc = PBSE_NONE;
   unsigned short        conn_port;
+  unsigned long         conn_addr;
   
   /*
    * find the socket whose client side is bound to the port named
@@ -553,9 +636,11 @@ int req_altauthenuser(
     {
     pthread_mutex_lock(svr_conn[s].cn_mutex);
     conn_port = svr_conn[s].cn_port;
+    conn_addr = get_connectaddr(s, FALSE);
     pthread_mutex_unlock(svr_conn[s].cn_mutex);
 
-    if (preq->rq_ind.rq_authen.rq_port != conn_port)
+    if (preq->rq_ind.rq_authen.rq_port != conn_port || 
+	svr_conn[preq->rq_conn].cn_addr != conn_addr)
       {
       continue;
       }
@@ -565,7 +650,7 @@ int req_altauthenuser(
   /* If s is less than PBS_NET_MAX_CONNECTIONS we have our port */
   if (s >= PBS_NET_MAX_CONNECTIONS)
     {
-	  req_reject(PBSE_BADCRED, 0, preq, NULL, "cannot authenticate user. Client connection not found");
+    req_reject(PBSE_BADCRED, 0, preq, NULL, "cannot authenticate user. Client connection not found");
     return(PBSE_BADCRED);
     }
 
@@ -573,7 +658,8 @@ int req_altauthenuser(
   if (rc)
     {
     /* FAILED */
-    return(rc);
+    req_reject(PBSE_BADCRED, 0, preq, NULL, "cannot authenticate user.  Failed to unmunge request");
+    return(PBSE_BADCRED);
     }
 
   /* SUCCESS */

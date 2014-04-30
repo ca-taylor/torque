@@ -66,10 +66,17 @@ int socket_avail_bytes_on_descriptor(
   int socket)
 
   {
-  unsigned avail_bytes;
-  if (ioctl(socket, FIONREAD, &avail_bytes) != -1)
-    return avail_bytes;
-  return(0);
+  int      rc = 0;
+  unsigned avail_bytes = 0;
+  char log_buf[LOCAL_LOG_BUF_SIZE];
+  
+  rc = ioctl(socket, FIONREAD, &avail_bytes);
+  if ( rc != 0 ) {
+    snprintf(log_buf, sizeof(log_buf), "Call to ioctl() returned %d", rc);
+    log_err(PBSE_NONE, __func__, log_buf);
+    avail_bytes = 0;
+  }
+  return(avail_bytes);
   } /* END socket_avail_bytes_on_descriptor() */
 
 
@@ -435,8 +442,7 @@ int socket_connect_addr(
 
   *socket = local_socket;
   
-  if ((local_socket >= 0) &&
-      (rc != PBSE_NONE))
+  if ((local_socket >= 0) && (rc != PBSE_NONE))
     close(local_socket);
 
   return(rc);
@@ -569,52 +575,173 @@ int socket_wait_for_xbytes(
   } /* END socket_wait_for_xbytes() */
 
 
+int connection_was_closed(int poll_rc, int sock)
+{
+  int  rc;
+  size_t nbytes;
+  char buf[8];
+  char log_buf[LOCAL_LOG_BUF_SIZE];
+/* 
+ * The recv() return value will be 0 when the peer 
+ * has performed an orderly shutdown.
+ */
+  rc = FALSE;
+  if ( poll_rc > 0 ) {
+    nbytes = recv(sock, buf, 7, MSG_PEEK | MSG_DONTWAIT);
+    snprintf(log_buf, sizeof(log_buf), "nbytes = %d", (int) nbytes);
+    log_err(PBSE_NONE, __func__, log_buf);
 
-
-int socket_wait_for_read(
-    
-  int socket)
-
-  {
-  int           rc = PBSE_NONE;
-  int           ret;
-  struct pollfd pfd;
-
-  pfd.fd = socket;
-  pfd.events = POLLIN | POLLHUP; /* | POLLRDNORM; */
-  pfd.revents = 0;
-
-  ret = poll(&pfd, 1, pbs_tcp_timeout * 1000); /* poll's timeout is in milliseconds */
-  if (ret > 0)
-    {
-    char buf[8];
-    if (recv(socket, buf, 7, MSG_PEEK | MSG_DONTWAIT) == 0)
-      {
-      /* This will only occur when the socket has closed */
-      rc = PBSE_SOCKET_CLOSE;
-      }
+    if ( (int) nbytes == 0) {
+      snprintf(log_buf, sizeof(log_buf), "socket %d was closed", sock);
+      log_err(PBSE_SOCKET_CLOSE, __func__, log_buf);
+      rc = TRUE;
     }
-  else if (ret == 0)
-    {
-    /* Server timeout reached */
-    rc = PBSE_TIMEOUT;
+    if ( (int) nbytes < 0 ) {
+      snprintf(log_buf, sizeof(log_buf), "recv() call failed.  errno = %d, %s", errno, strerror(errno));
+      log_err(PBSE_SOCKET_READ, __func__, log_buf);
     }
-  else /* something bad happened to poll */
-    {
-    if (pfd.revents & POLLNVAL)
-      {
-      rc = PBSE_SOCKET_CLOSE;
-      }
-    else
-      rc = PBSE_SOCKET_DATA;
-    }
-
-
+  }
   return(rc);
-  } /* END socket_wait_for_read() */
+}
+
+int socket_timed_out(int poll_rc, int sock)
+{
+/* 
+ * Log a timeout error.
+ */
+  int rc = FALSE;
+  char ipAddrStr[INET_ADDRSTRLEN];
+  char log_buf[LOCAL_LOG_BUF_SIZE];
+  char timeoutMsg[] = "poll() timed out for %s:%d on socket %d after %d secs";
+  extern struct connection svr_conn[];
+
+  if ( poll_rc == 0 ) {
+    inet_ntop(AF_INET, &(svr_conn[sock].cn_addr), ipAddrStr, INET_ADDRSTRLEN);
+    snprintf(log_buf, sizeof(log_buf), timeoutMsg,
+             ipAddrStr, svr_conn[sock].cn_port, sock, pbs_tcp_timeout);
+    log_err(PBSE_TIMEOUT, __func__, log_buf);
+    rc = TRUE;
+  }
+  return(rc);
+}
+
+int poll_returned_error(struct pollfd *pfd, int sock)
+{
+  int rc;
+  char log_buf[LOCAL_LOG_BUF_SIZE];
+
+  if (pfd->revents & POLLNVAL) {
+    snprintf(log_buf, sizeof(log_buf), "poll() called with invalid (closed) socket, %d", sock);
+    log_err(PBSE_TIMEOUT, __func__, log_buf);
+    rc = PBSE_SOCKET_CLOSE;
+  }
+  else {
+    snprintf(log_buf, sizeof(log_buf), "poll() failed: %d %s", errno, strerror(errno));
+    log_err(PBSE_TIMEOUT, __func__, log_buf);
+    rc = PBSE_SOCKET_DATA;
+  }
+  return(rc);
+}
+
+void report_poll_events(struct pollfd *pfd)
+{
+  char log_buf[LOCAL_LOG_BUF_SIZE];
+
+  if (pfd->revents & POLLNVAL) {
+    snprintf(log_buf, sizeof(log_buf), "poll() reported POLLNVAL");
+    log_err(PBSE_NONE, __func__, log_buf);
+  }
+  if (pfd->revents & POLLHUP) {
+    snprintf(log_buf, sizeof(log_buf), "poll() reported POLLHUP");
+    log_err(PBSE_NONE, __func__, log_buf);
+  }
+  if (pfd->revents & POLLRDHUP) {
+    snprintf(log_buf, sizeof(log_buf), "poll() reported POLLRDHUP");
+    log_err(PBSE_NONE, __func__, log_buf);
+  }
+  if (pfd->revents & POLLERR) {
+    snprintf(log_buf, sizeof(log_buf), "poll() reported POLLERR");
+    log_err(PBSE_NONE, __func__, log_buf);
+  }
+  if (pfd->revents & POLLIN) {
+    snprintf(log_buf, sizeof(log_buf), "poll() reported POLLIN");
+    log_err(PBSE_NONE, __func__, log_buf);
+  }
+  return;
+}
 
 
+int socket_wait_for_read(int socket)
+  {
+  int            rc = PBSE_NONE;
+  int            ret = 0;
+  fd_set         rfd;
+  struct timeval timeout;
+  char log_buf[LOCAL_LOG_BUF_SIZE];
 
+  timeout.tv_sec = pbs_tcp_timeout;
+  timeout.tv_usec = 0;
+
+  FD_ZERO(&rfd);
+  FD_SET(socket, &rfd);
+
+  ret = select(FD_SETSIZE, &rfd, NULL, NULL, &timeout);
+
+  if (socket_timed_out(ret, socket)) {
+      rc = PBSE_TIMEOUT;
+      return(rc);
+    }
+
+  if ( ret < 0 ) {
+    snprintf(log_buf, sizeof(log_buf), "select() failed: %d %s", errno, strerror(errno));
+    log_err(PBSE_TIMEOUT, __func__, log_buf);
+    rc = PBSE_SOCKET_DATA;
+    return(rc);
+  }
+
+  if ( ret == 1 ) {
+    if (connection_was_closed(ret, socket)) {
+      rc = PBSE_SOCKET_CLOSE;
+      return(rc);
+    }
+  }
+  return(rc);
+} /* END socket_wait_for_read() */
+
+
+//int socket_wait_for_read(
+//  int socket)
+//{
+//  int           rc;
+//  int           ret;
+//  struct pollfd pfd;
+//  char          log_buf[LOCAL_LOG_BUF_SIZE];
+//
+//  pfd.fd = socket;
+//  pfd.events = POLLIN | POLLHUP | POLLRDHUP; 
+//  pfd.revents = 0;
+//
+//  rc = PBSE_NONE;
+//  ret = poll(&pfd, 1, pbs_tcp_timeout * 1000); /* poll's timeout is in milliseconds */
+//  snprintf(log_buf, sizeof(log_buf), "poll() returned %d for socket %d", ret,  pfd.fd);
+//  log_err(PBSE_NONE, __func__, log_buf);
+//  report_poll_events(&pfd);
+//  
+//  if (connection_was_closed(ret, socket)) {
+//    rc = PBSE_SOCKET_CLOSE;
+//  }
+//  else {
+//    if (socket_timed_out(ret, socket)) {
+//      rc = PBSE_TIMEOUT;
+//    }
+//    else { 
+//      if ( ret < 0 ) { /* something bad happened to poll */
+//        rc = poll_returned_error(&pfd, socket);
+//      }
+//    }
+//  }
+//  return(rc);
+//} /* END socket_wait_for_read() */
 
 void socket_read_flush(
     
@@ -733,19 +860,28 @@ int socket_read(
 
   {
   int       rc = PBSE_NONE;
-  long long avail_bytes = socket_avail_bytes_on_descriptor(socket);
-  long long byte_count = 0;
+  long long avail_bytes;
+  long long byte_count; 
+  char      log_buf[LOCAL_LOG_BUF_SIZE];
 
   if ((the_str == NULL) || (str_len == NULL))
     return PBSE_INTERNAL;
 
+  byte_count  = 0;
+  avail_bytes = socket_avail_bytes_on_descriptor(socket);
+
   while (avail_bytes == 0)
     {
-    if ((rc = socket_wait_for_read(socket)) != PBSE_NONE)
+    if ((rc = socket_wait_for_read(socket)) != PBSE_NONE) {
+      snprintf(log_buf, sizeof(log_buf), "socket_wait_for_read() returned %d reading from socket %d", rc, socket);
+      log_err(rc, __func__, log_buf);
       break;
+    }
     avail_bytes = socket_avail_bytes_on_descriptor(socket);
     if (avail_bytes == 0)
       {
+      snprintf(log_buf, sizeof(log_buf), "avail_bytes = 0");
+      log_err(rc, __func__, log_buf);
       rc = PBSE_SOCKET_READ;
       break;
       }
@@ -753,14 +889,19 @@ int socket_read(
 
   if (rc != PBSE_NONE)
     {
+    snprintf(log_buf, sizeof(log_buf), "socket_wait_for_read() returned %d reading from socket %d", rc, socket);
+    log_err(rc, __func__, log_buf);
     }
   else if ((*the_str = (char *)calloc(1, avail_bytes+1)) == NULL)
     {
+    snprintf(log_buf, sizeof(log_buf), "calloc() failed");
+    log_err(PBSE_MEM_MALLOC, __func__, log_buf);
     rc = PBSE_MEM_MALLOC;
     }
-  else if ((rc = socket_read_force(socket, *the_str, avail_bytes, &byte_count))
-      != PBSE_NONE)
+  else if ((rc = socket_read_force(socket, *the_str, avail_bytes, &byte_count)) != PBSE_NONE)
     {
+    snprintf(log_buf, sizeof(log_buf), "socket_read_force() returned %d reading from socket %d", rc, socket);
+    log_err(rc, __func__, log_buf);
     }
   else
     {

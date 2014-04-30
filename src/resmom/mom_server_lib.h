@@ -87,7 +87,7 @@ int write_status_strings(char *stat_str, node_comm_t *nc);
 
 int send_update();
 
-void mom_server_all_update_stat(void);
+void *mom_server_all_update_stat(void *);
 
 long power(register int x, register int n);
 

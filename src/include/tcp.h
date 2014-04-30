@@ -13,17 +13,13 @@ struct tcpdisbuf
 
 struct tcp_chan
   {
-
   struct tcpdisbuf readbuf;
-
   struct tcpdisbuf writebuf;
-
   int              IsTimeout;  /* (boolean)  1 - true */
   int              ReadErrno;
   int              SelectErrno;
   int              sock;
   };
-
 
 int tcp_getc(struct tcp_chan *chan);
 int tcp_gets(struct tcp_chan *chan, char *, size_t);

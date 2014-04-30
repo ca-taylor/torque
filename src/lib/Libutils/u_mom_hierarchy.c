@@ -295,7 +295,7 @@ int tcp_connect_sockaddr(
 
   {
   int rc = PBSE_NONE;
-  int stream = TRANSIENT_SOCKET_FAIL;
+  int sock = TRANSIENT_SOCKET_FAIL;
   char *err_msg = NULL;
   char local_err_buf[LOCAL_LOG_BUF];
   char *tmp_ip = NULL;
@@ -303,12 +303,12 @@ int tcp_connect_sockaddr(
 
   while(retryCount-- >= 0)
     {
-    if ((stream = socket_get_tcp_priv()) < 0)
+    if ((sock = socket_get_tcp_priv()) < 0)
       {
       /* FAILED */
       log_err(errno,__func__,"Failed when trying to get privileged port - socket_get_tcp_priv() failed");
       }
-    else if ((rc = socket_connect_addr(&stream, sa, sa_size, 1, &err_msg)) != PBSE_NONE)
+    else if ((rc = socket_connect_addr(&sock, sa, sa_size, 1, &err_msg)) != PBSE_NONE)
       {
       /* FAILED */
       if (errno != EINTR) //Interrupted system call is a retryable error so try it again.
@@ -332,21 +332,19 @@ int tcp_connect_sockaddr(
     else
       {
       /* SUCCESS */
-      return(stream);
+      return(sock);
       }
 
     /* FAILURE */
-    if (IS_VALID_STREAM(stream))
+    if (IS_VALID_STREAM(sock))
       {
-      close(stream);
-      stream = TRANSIENT_SOCKET_FAIL;
+      close(sock);
+      sock = TRANSIENT_SOCKET_FAIL;
       }
     }
 
-  return(stream);
+  return(sock);
   } /* END tcp_connect_sockaddr() */
-
-
 
 
 /* 
@@ -596,14 +594,14 @@ int read_tcp_reply(
     if (ret >= 0)
       {
       snprintf(log_buf, sizeof(log_buf),
-        "Could not read reply for protocol %d command %d: %s",
-        protocol, command, dis_emsg[ret]);
+        "Could not read reply on socket %d for protocol %d command %d: %s",
+        chan->sock, protocol, command, dis_emsg[ret]);
       }
     else
       {
       snprintf(log_buf, sizeof(log_buf),
-        "Could not read reply for protocol %d command %d",
-        protocol, command);
+        "Could not read reply on socket %d for protocol %d command %d",
+        chan->sock, protocol, command);
       }
     log_err(-1, __func__, log_buf);
     }

@@ -818,20 +818,22 @@ bool is_jobid_in_mom(
   char *joblist = strdup(jobs);
   char *jobptr = joblist;
   char *jobidstr = NULL;
+  char *begin    = joblist;
 
   jobidstr = threadsafe_tokenizer(&jobptr, (char *)" ");
   while (jobidstr != NULL)
     {
     if (strcmp(jobid, jobidstr) == 0)
       {
-      free(joblist);
+      if (begin != NULL)
+        free(begin);
       return(true);
       }
-
     jobidstr = threadsafe_tokenizer(&jobptr, " ");
     }
 
-  free(joblist);
+  if (begin != NULL)
+    free(begin);
 
   return(false);
   }
@@ -4552,6 +4554,7 @@ int procs_requested(
         if (proplist(&str, &prop, &num_procs, &num_gpus, &num_mics))
           {
           free(tmp_spec);
+	  free_prop(prop);
           return(-1);
           }
         }
@@ -4564,13 +4567,15 @@ int procs_requested(
         {
         /* must be a prop list with no number in front */
         free(tmp_spec);
-
+	free_prop(prop);
         return(-1);
         }
       }
     total_procs += num_procs * num_nodes;
     } while(*str++ == '+');
   
+  if (prop != NULL)
+    free_prop(prop);
   free(tmp_spec);
   
   return(total_procs);

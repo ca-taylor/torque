@@ -88,7 +88,7 @@ extern void encode_used (job *, int, tlist_head *);
 extern void encode_flagged_attrs (job *, int, tlist_head *);
 extern void job_nodes (job *);
 extern int task_recov (job *);
-extern void mom_server_all_update_stat(void);
+extern void *mom_server_all_update_stat(void *);
 extern void check_state(int);
 extern int mark_for_resend (job *);
 extern void checkpoint_partial(job *pjob);
@@ -1342,7 +1342,7 @@ void *obit_reply(
     {
     check_state(1);
 
-    mom_server_all_update_stat();
+    (void *) mom_server_all_update_stat(NULL);
     }
 
   return(NULL);
