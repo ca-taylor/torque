@@ -158,6 +158,7 @@ typedef struct proc_stat
   unsigned long   stime; /* stime this process */
   unsigned long   cutime; /* sum of children's utime */
   unsigned long   cstime; /* sum of children's stime */
+  unsigned long   numthreads;
   int           pid;  /* process id */
   int             ppid;         /* process id */
   int             pgrp;         /* process group */

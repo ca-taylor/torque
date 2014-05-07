@@ -193,6 +193,7 @@ char noglobid[] = "none";
 
 extern int    LOGLEVEL;
 extern long   TJobStartBlockTime;
+extern int    FatalJobPollFailure;
 enum rwhich { invalid, listen_out, listen_err, new_out, new_err};
 struct routefd
   {
@@ -1494,13 +1495,20 @@ void node_bailout(
           }
         else
           {
-          sprintf(log_buffer, "%s POLL failed from node %s %d - recovery not attempted - job will be killed)",
-            pjob->ji_qs.ji_jobid,
-            np->hn_host,
-            np->hn_node);
+	  /*
+	  ** Setting ji_nodekill will result in the job being killed.
+	  ** Do it unless we're told not to via config parameter.
+	  */
+	  if (FatalJobPollFailure)
+	    {
+	      sprintf(log_buffer, "%s POLL failed from node %s %d - recovery not attempted - job will be killed)",
+		pjob->ji_qs.ji_jobid,
+		np->hn_host,
+		np->hn_node);
 
-          pjob->ji_nodekill = np->hn_node;
-          }
+	      pjob->ji_nodekill = np->hn_node;
+	    }
+	  }
 
         log_err(-1, __func__, log_buffer);
 
