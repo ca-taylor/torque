@@ -492,8 +492,13 @@ int svr_is_request(
         enqueue_threadpool_request(send_hierarchy_threadtask, hi);
         ret = DIS_SUCCESS;
         }
-      else
+      else {
+        snprintf(log_buf, sizeof(log_buf), "Sending IS_STATUS reply to %s...", node_name);
+        log_err(PBSE_NONE, __func__, log_buf);
         write_tcp_reply(chan,IS_PROTOCOL,IS_PROTOCOL_VER,IS_STATUS,ret);
+        snprintf(log_buf, sizeof(log_buf), "Done. ret = %d", ret);
+        log_err(PBSE_NONE, __func__, log_buf);
+      }
 
       if(node != NULL)
         {

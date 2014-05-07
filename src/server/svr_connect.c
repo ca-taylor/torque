@@ -384,7 +384,6 @@ void svr_disconnect(
 
       }
 
-
     pthread_mutex_lock(connection[handle].ch_mutex);
     shutdown(connection[handle].ch_socket, 2);
 

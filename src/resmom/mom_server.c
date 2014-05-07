@@ -1242,7 +1242,7 @@ int mom_server_update_stat(
 
   sock = tcp_connect_sockaddr((struct sockaddr *)&pms->sock_addr, sizeof(pms->sock_addr));
   snprintf(log_buf, sizeof(log_buf), "Using connection on socket %d for status update", sock);
-  log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE, __func__, log_buf);
+  log_err(PBSE_NONE, __func__, log_buf);
   
   if (IS_VALID_STREAM(sock))
     {

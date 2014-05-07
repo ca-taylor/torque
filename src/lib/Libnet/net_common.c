@@ -353,7 +353,11 @@ int socket_connect_addr(
   int   cntr = 0;
   int   rc = PBSE_NONE;
   char  tmp_buf[LOCAL_LOG_BUF_SIZE+1];
+  char  ipAddrStr[INET_ADDRSTRLEN];
   int   local_socket = *socket;
+  struct sockaddr_in *remote_addr;
+
+  remote_addr = (struct sockaddr_in *)remote;
 
   while ((cntr < RES_PORT_RETRY) &&
          ((rc = connect(local_socket, remote, remote_size)) != 0))
@@ -365,8 +369,9 @@ int socket_connect_addr(
       /* permanent failures go here */
       case ECONNREFUSED:    /* Connection refused */
       case ETIMEDOUT:       /* Connection timed out */
-        snprintf(tmp_buf, sizeof(tmp_buf), "cannot connect to port %d in %s - connection refused",
-          local_socket, __func__);
+        inet_ntop(AF_INET, &remote_addr->sin_addr.s_addr, ipAddrStr, INET_ADDRSTRLEN);
+        snprintf(tmp_buf, sizeof(tmp_buf), "%s: Cannot connect to %s:%d on socket %d - connection refused", 
+                 __func__, ipAddrStr, ntohs(remote_addr->sin_port), local_socket);
         *error_msg = strdup(tmp_buf);
         rc = PBS_NET_RC_RETRY;
         close(local_socket);
@@ -442,8 +447,15 @@ int socket_connect_addr(
 
   *socket = local_socket;
   
-  if ((local_socket >= 0) && (rc != PBSE_NONE))
+  if ((local_socket >= 0) && (rc != PBSE_NONE)) {
     close(local_socket);
+  }
+  else {
+    inet_ntop(AF_INET, &remote_addr->sin_addr.s_addr, ipAddrStr, INET_ADDRSTRLEN);
+    snprintf(tmp_buf, sizeof(tmp_buf), "Connected to %s:%d on socket %d.", 
+             ipAddrStr, ntohs(remote_addr->sin_port), local_socket);
+    log_err(rc, __func__, tmp_buf); 
+  }
 
   return(rc);
   } /* END socket_connect_addr() */
@@ -685,7 +697,7 @@ int socket_wait_for_read(int socket)
   FD_ZERO(&rfd);
   FD_SET(socket, &rfd);
 
-  ret = select(FD_SETSIZE, &rfd, NULL, NULL, &timeout);
+  ret = select(socket+1, &rfd, NULL, NULL, &timeout);
 
   if (socket_timed_out(ret, socket)) {
       rc = PBSE_TIMEOUT;

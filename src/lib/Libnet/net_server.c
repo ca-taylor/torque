@@ -365,7 +365,7 @@ int init_network(
   read_func[initialized++] = readfunc;
 
   snprintf(log_buf, LOCAL_LOG_BUF_SIZE, "initialized = %d", initialized);
-  log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_SERVER, __func__, log_buf);
+  log_err(PBSE_NONE, __func__, log_buf);
 
   if (port != 0)
     {
@@ -394,7 +394,7 @@ int init_network(
     socname.sin_family = AF_INET;
 
     snprintf(log_buf, LOCAL_LOG_BUF_SIZE, "Binding socket %d on port %u", sock, port);
-    log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_SERVER, __func__, log_buf);
+    log_err(PBSE_NONE, __func__, log_buf);
 
     if (bind(sock, (struct sockaddr *)&socname, sizeof(socname)) < 0)
       {
@@ -935,8 +935,9 @@ void *accept_conn(
     char ipAddrStr[INET_ADDRSTRLEN];
 
     inet_ntop(AF_INET, &from.sin_addr.s_addr, ipAddrStr, INET_ADDRSTRLEN);
-    snprintf(log_buf, sizeof(log_buf), "Accepted connection on socket %d from %s:%u", newsock, ipAddrStr, from.sin_port);
-    log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_buf);
+    snprintf(log_buf, sizeof(log_buf), "Accepted connection from %s:%u on socket %d", 
+             ipAddrStr, ntohs(from.sin_port), newsock);
+    log_err(PBSE_NONE, __func__, log_buf);
 
     add_conn(
       newsock,
@@ -946,13 +947,8 @@ void *accept_conn(
       sock_type,
       read_func[cn_active]);
     }
-
-
   return(NULL);
   }  /* END accept_conn() */
-
-
-
 
 void globalset_add_sock(
 
@@ -1024,7 +1020,7 @@ int add_connection(
   num_connections++;
   snprintf(log_buf, LOCAL_LOG_BUF_SIZE, "Adding Connection on socket %d, num_connections = %d", sock, num_connections);
   pthread_mutex_unlock(num_connections_mutex);
-  log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_buf);
+  log_err(PBSE_NONE, __func__, log_buf);
 
   if (add_wait_request)
     {
@@ -1048,15 +1044,15 @@ int add_connection(
   svr_conn[sock].cn_socktype = socktype;
 
   snprintf(log_buf, LOCAL_LOG_BUF_SIZE, "    svr_conn[%d].cn_active = %d", sock, type);
-  log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_buf);
+  log_err(PBSE_NONE, __func__, log_buf);
 
   cn_addr = htonl(svr_conn[sock].cn_addr);
   inet_ntop(AF_INET, &cn_addr, ipAddrStr, INET_ADDRSTRLEN);
   snprintf(log_buf, LOCAL_LOG_BUF_SIZE, "    svr_conn[%d].cn_addr = %s", sock, ipAddrStr);
-  log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_buf);
+  log_err(PBSE_NONE, __func__, log_buf);
 
   snprintf(log_buf, LOCAL_LOG_BUF_SIZE, "    svr_conn[%d].cn_port = %u", sock, svr_conn[sock].cn_port);
-  log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_buf);
+  log_err(PBSE_NONE, __func__, log_buf);
 
 #ifndef NOPRIVPORTS
 
@@ -1157,7 +1153,9 @@ void close_conn(
   int has_mutex) /* I */
 
   {
-  char log_message[LOG_BUF_SIZE];
+  ssize_t nbytes; 
+  int     count;
+  char log_buf[LOG_BUF_SIZE];
 
   /* close conn shouldn't be called on local connections */
   if (sd == PBS_LOCAL_CONNECTION)
@@ -1166,8 +1164,8 @@ void close_conn(
   if ((sd < 0) ||
       (max_connection <= sd))
     {
-    snprintf(log_message, sizeof(log_message), "sd is invalid %d!!!", sd);
-    log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_message);
+    snprintf(log_buf, sizeof(log_buf), "sd is invalid %d!!!", sd);
+    log_err(PBSE_NONE,__func__,log_buf);
 
     return;
     }
@@ -1187,9 +1185,9 @@ void close_conn(
 
   if (svr_conn[sd].cn_oncl != NULL)
     {
-    snprintf(log_message, LOG_BUF_SIZE, "Connection %d - func %lx",
+    snprintf(log_buf, LOG_BUF_SIZE, "Connection %d - func %lx",
       sd, (unsigned long)svr_conn[sd].cn_oncl);
-    log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE, __func__, log_message);
+    log_err(PBSE_NONE, __func__, log_buf);
 
     svr_conn[sd].cn_oncl(sd);
     }
@@ -1199,14 +1197,32 @@ void close_conn(
    * GlobalSocketReadSet being initialized
    */
 
-  if (GlobalSocketReadSet != NULL)
-    {
+  if (GlobalSocketReadSet != NULL) {
     globalset_del_sock(sd);
-    }
+  }
 
-  snprintf(log_message, LOG_BUF_SIZE, "Closing socket %d ", sd);
-  log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE, __func__, log_message);
-  close(sd);
+  snprintf(log_buf, LOG_BUF_SIZE, "Closing socket %d ", sd);
+  log_err(PBSE_NONE, __func__, log_buf);
+  if ( shutdown(sd, SHUT_WR) ) {
+    snprintf(log_buf, LOG_BUF_SIZE, "shutdown() -  %s", strerror(errno));
+    log_err(PBSE_NONE, __func__, log_buf);
+  }
+
+  count  = 0;
+  nbytes = recv(sd, log_buf, 7, MSG_PEEK | MSG_DONTWAIT);
+  while ( (int) nbytes > 0 && count < 10000 ) {
+    nbytes = recv(sd, log_buf, 7, MSG_PEEK | MSG_DONTWAIT);
+    count++;
+  }
+  if ( count >= 10000 ) {
+    snprintf(log_buf, LOG_BUF_SIZE, "Warning: recv() loop reached limit");
+    log_err(PBSE_NONE, __func__, log_buf);
+  }
+
+  if ( close(sd) ) {
+    snprintf(log_buf, LOG_BUF_SIZE, "close() -  %s", strerror(errno));
+    log_err(PBSE_NONE, __func__, log_buf);
+  }
 
   svr_conn[sd].cn_addr = 0;
   svr_conn[sd].cn_handle = -1;
@@ -1220,9 +1236,9 @@ void close_conn(
 
   pthread_mutex_lock(num_connections_mutex);
   num_connections--;
-  snprintf(log_message, sizeof(log_message), "Closed Connection on socket %d, num_connections = %d", sd, num_connections);
+  snprintf(log_buf, sizeof(log_buf), "Closed Connection on socket %d, num_connections = %d", sd, num_connections);
   pthread_mutex_unlock(num_connections_mutex);
-  log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_message);
+  log_err(PBSE_NONE,__func__,log_buf);
 
   return;
   }  /* END close_conn() */
