@@ -108,7 +108,7 @@ static int dis_reply_write(
   else if ((rc = encode_DIS_reply(chan, preply)) ||
            (rc = DIS_tcp_wflush(chan)))
     {
-    sprintf(log_buf, "DIS reply failure, %d", rc);
+    snprintf(log_buf, sizeof(log_buf), "DIS reply failure, %d", rc);
 
     log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_REQUEST, __func__, log_buf);
 
@@ -175,9 +175,9 @@ int reply_send_svr(
 
       if (LOGLEVEL >= 7)
         {
-        sprintf(log_buf, "Reply sent for request type %s on socket %d",
+        snprintf(log_buf, sizeof(log_buf), "Reply sent for request type %s on socket %d",
           reqtype_to_txt(request->rq_type),
-          sfds);
+	  sfds);
 
         log_record(PBSEVENT_JOB, PBS_EVENTCLASS_JOB, __func__, log_buf);
         }
@@ -356,7 +356,7 @@ void req_reject(
     /* NOTE: Don't need this last snprintf() unless another message is concatenated. */
     }
 
-  sprintf(log_buf, "Reject reply code=%d(%s), aux=%d, type=%s, from %s@%s",
+  snprintf(log_buf, sizeof(log_buf), "Reject reply code=%d(%s), aux=%d, type=%s, from %s@%s",
     code,
     msgbuf,
     aux,

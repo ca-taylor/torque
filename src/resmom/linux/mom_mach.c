@@ -265,10 +265,10 @@ void proc_get_btime(void)
 
 /* NOTE:  leading '*' indicates that field should be ignored */
 
-/* FORMAT: <PID> <COMM> <STATE> <PPID> <PGRP> <SESSION> [<TTY_NR>] [<TPGID>] <FLAGS> [<MINFLT>] [<CMINFLT>] [<MAJFLT>] [<CMAJFLT>] <UTIME> <STIME> <CUTIME> <CSTIME> [<PRIORITY>] [<NICE>] [<0>] [<ITREALVALUE>] <STARTTIME> <VSIZE> <RSS> [<RLIM>] [<STARTCODE>] ... */
+/* FORMAT: <PID> <COMM> <STATE> <PPID> <PGRP> <SESSION> [<TTY_NR>] [<TPGID>] <FLAGS> [<MINFLT>] [<CMINFLT>] [<MAJFLT>] [<CMAJFLT>] <UTIME> <STIME> <CUTIME> <CSTIME> [<PRIORITY>] [<NICE>] [<num_thread>] [<ITREALVALUE>] <STARTTIME> <VSIZE> <RSS> [<RLIM>] [<STARTCODE>] ... */
 
 static char stat_str[] = " %c %d %d %d %*d %*d %u %*u \
-                         %*u %*u %*u %lu %lu %lu %lu %*ld %*ld %*u %*ld %lu %llu %lld %*lu %*lu \
+                         %*u %*u %*u %lu %lu %lu %lu %*ld %*ld %ld %*ld %lu %llu %lld %*lu %*lu \
                          %*lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu %*lu";
 
 /*
@@ -377,9 +377,10 @@ proc_stat_t *get_proc_stat(
         &ps.stime,     /* stime - jiffies that this process has been scheduled in kernel mode */
         &ps.cutime,    /* cutime - jiffies that this process’s waited-for children have been scheduled in user mode */
         &ps.cstime,    /* cstime - jiffies that this process’s waited-for children have been scheduled in kernel mode */
+        &ps.numthreads,
         &jstarttime,   /* starttime */
         &ps.vsize,     /* vsize */
-        &ps.rss) != 12)   /* rss */
+        &ps.rss) != 13)   /* rss */
     {
     /* FAILURE */
 
@@ -406,6 +407,12 @@ proc_stat_t *get_proc_stat(
   ps.stime = JTOS(ps.stime);
   ps.cutime = JTOS(ps.cutime);
   ps.cstime = JTOS(ps.cstime);
+
+  if(ps.numthreads > 1)
+    {
+    ps.vsize /= ps.numthreads;
+    ps.rss /= ps.numthreads;
+    }
 
   /* SUCCESS */
 

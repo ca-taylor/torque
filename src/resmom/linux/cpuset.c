@@ -1935,52 +1935,6 @@ void remove_boot_set(
   } /* END remove_boot_set() */
 
 
-
-
-
-/**
- * Check if a pid_t number is a process ID or thread ID.
- *
- * Return 1 if it is a pid.
- * Return 0 if it is a tid.
- * Return -1 if error.
- *
- * The check compares the tread group ID from /proc/<id>/status with pid.
- * If both are equal, id is the master thread of the thread group, and is regarded as "process ID".
- * If they are not, id is a child thread in the thread group, and is regarded as "thread ID".
- */
-
-static int PidIsPid(
-
-  pid_t pid)
-
-  {
-  char    path[1024];
-  char    readbuf[1024];
-  FILE   *fd;
-  pid_t   tgid;
-  int     rc = -1;
-
-  sprintf(path, "/proc/%d/status", pid);
-
-  if ((fd = fopen(path, "r")) != NULL)
-    {
-    while ((fgets(readbuf, sizeof(readbuf), fd)) != NULL)
-      {
-      if ((strncmp(readbuf, "Tgid:",5)) == 0)
-        {
-        if ((sscanf(readbuf + 5, " %d", &tgid)) == 1)
-          rc = tgid == pid;
-        break;
-        }
-      }
-    fclose(fd);
-    }
-
-  return(rc);
-  } /* END PidIsPid() */
-
-
 /**
  * Lists tasks currently attached to a cpuset incl. its child cpusets.
  *
@@ -2053,10 +2007,6 @@ struct pidl *get_cpuset_pidlist(
   for (i = 0; i < cpuset_pidlist_length(plist); i++)
     {
     pid = cpuset_get_pidlist(plist, i);
-
-    /* Do not store IDs of individual threads */
-    if ((PidIsPid(pid)) != 1)
-      continue;
 
     if ((pp = (struct pidl *)calloc(1,sizeof(struct pidl))) == NULL)
       {
@@ -2142,10 +2092,6 @@ struct pidl *get_cpuset_pidlist(
           while ((fgets(tid, sizeof(tid), fd)) != NULL)
             {
             pid = atoi(tid);
-
-            /* Do not store IDs of individual threads */
-            if ((PidIsPid(pid)) != 1)
-              continue;
 
             if ((pp = (struct pidl *)calloc(1, sizeof(struct pidl))) == NULL)
               {

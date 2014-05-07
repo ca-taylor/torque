@@ -3475,7 +3475,7 @@ int req_jobobit(
      }
 #endif    /* USESAVEDRESOURCES */
 
-  safe_strncat(mailbuf, acctbuf, sizeof(mailbuf) - strlen(mailbuf) - 1);
+  safe_strncat(mailbuf, acctbuf + accttail, sizeof(mailbuf) - strlen(mailbuf) - 1);
 
   reply_ack(preq);
 
