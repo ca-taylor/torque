@@ -929,13 +929,13 @@ static int mm_gettime(
 static int injob(
 
   job   *pjob,
-  pid_t  sid)
+  pid_t  sid,
+  struct pidl **pids)
 
   {
   task *ptask;
   pid_t  pid;
 #ifdef PENABLE_LINUX26_CPUSETS
-  struct pidl   *pids = NULL;
   struct pidl   *pp;
 #else
   proc_stat_t   *ps;
@@ -961,8 +961,15 @@ static int injob(
 
   /* check whether the sid is in the job's cpuset */
 
-  pids = get_cpuset_pidlist(pjob->ji_qs.ji_jobid, pids);
-  pp   = pids;
+  if(*pids == NULL)
+    {
+    *pids = get_cpuset_pidlist(pjob->ji_qs.ji_jobid, *pids);
+    pp   = *pids;
+    }
+  else
+    {
+    pp = *pids;
+    }
 
   while (pp != NULL)
     {
@@ -970,11 +977,9 @@ static int injob(
     pp  = pp->next;
     if (pid == sid)
       {
-      free_pidlist(pids);
       return(TRUE);
       }
     }
-    free_pidlist(pids);
 #else
 
   /* get the parent process id of the sid and check whether it is part of
@@ -1034,6 +1039,7 @@ static unsigned long cput_sum(
   int            nps = 0;
   int            i;
   proc_stat_t   *ps;
+  struct pidl  *pids = NULL;
 
   cputime = 0;
 
@@ -1058,7 +1064,7 @@ static unsigned long cput_sum(
       log_record(PBSEVENT_DEBUG, 0, __func__, log_buffer);
       }
 
-    if (!injob(pjob, ps->session))
+    if (!injob(pjob, ps->session,&pids))
       continue;
 
     nps++;
@@ -1077,6 +1083,12 @@ static unsigned long cput_sum(
       log_record(PBSEVENT_SYSTEM, 0, __func__, log_buffer);
       }
     }    /* END for (i) */
+#ifdef PENABLE_LINUX26_CPUSETS
+    if(pids != NULL)
+      {
+      free_pidlist(pids);
+      }
+#endif
 
   if (nps == 0)
     pjob->ji_flags |= MOM_NO_PROC;
@@ -1105,9 +1117,9 @@ static int overcpu_proc(
   pid_t          pid;
 
   proc_stat_t   *ps;
+  struct pidl   *pids = NULL;
 
 #ifdef PENABLE_LINUX26_CPUSETS
-  struct pidl   *pids = NULL;
   struct pidl   *pp;
 #else
   struct dirent *dent;
@@ -1149,7 +1161,7 @@ static int overcpu_proc(
 
 #ifndef PENABLE_LINUX26_CPUSETS 
     /* if it was in the cpuset, its part of the job, no need to check */
-    if (!injob(pjob, ps->session))
+    if (!injob(pjob, ps->session,&pids))
       continue;
 #endif /* PENABLE_LINUX26_CPUSETS */
 
@@ -1160,7 +1172,11 @@ static int overcpu_proc(
     if (cputime > limit)
       {
 #ifdef PENABLE_LINUX26_CPUSETS
-      free_pidlist(pids);
+      if(pids != NULL)
+        {
+        free_pidlist(pids);
+        pids = NULL;
+        }
 #endif
 
       return(TRUE);
@@ -1168,7 +1184,10 @@ static int overcpu_proc(
     }
 
 #ifdef PENABLE_LINUX26_CPUSETS
-  free_pidlist(pids);
+  if(pids != NULL)
+    {
+    free_pidlist(pids);
+    }
 #endif
 
   return(FALSE);
@@ -1193,6 +1212,7 @@ static unsigned long long mem_sum(
   int                 i;
   unsigned long long  segadd;
   proc_stat_t        *ps;
+  struct pidl       *pids = NULL;
 
   segadd = 0;
 
@@ -1207,7 +1227,7 @@ static unsigned long long mem_sum(
     {
     ps = &proc_array[i];
 
-    if (!injob(pjob, ps->session))
+    if (!injob(pjob, ps->session,&pids))
       continue;
 
     segadd += ps->vsize;
@@ -1224,6 +1244,14 @@ static unsigned long long mem_sum(
       }
 
     }  /* END for (i) */
+
+#ifdef PENABLE_LINUX26_CPUSETS
+  if(pids != NULL)
+    {
+    free_pidlist(pids);
+    }
+#endif
+
 
   return(segadd);
   }  /* END mem_sum() */
@@ -1246,6 +1274,7 @@ static unsigned long long resi_sum(
   int                 i;
   unsigned long long  resisize;
   proc_stat_t        *ps;
+  struct pidl       *pids = NULL;
 #ifdef USELIBMEMACCT
   long long                w_rss;
 #endif
@@ -1263,7 +1292,7 @@ static unsigned long long resi_sum(
     {
     ps = &proc_array[i];
 
-    if (!injob(pjob, ps->session))
+    if (!injob(pjob, ps->session,&pids))
       continue;
 
 #ifdef USELIBMEMACCT
@@ -1308,6 +1337,13 @@ static unsigned long long resi_sum(
 
     }  /* END for (i) */
 
+#ifdef PENABLE_LINUX26_CPUSETS
+  if(pids != NULL)
+    {
+    free_pidlist(pids);
+    }
+#endif
+
   return(resisize);
   }  /* END resi_sum() */
 
@@ -1326,6 +1362,7 @@ static int overmem_proc(
   {
   int                 i;
   proc_stat_t        *ps;
+  struct pidl       *pids = NULL;
 
   if (LOGLEVEL >= 6)
     {
@@ -1339,7 +1376,7 @@ static int overmem_proc(
     {
     ps = &proc_array[i];
 
-    if (!injob(pjob, ps->session))
+    if (!injob(pjob, ps->session,&pids))
       continue;
 
     if (ps->vsize > limit)
@@ -1347,6 +1384,13 @@ static int overmem_proc(
       return(TRUE);
       }
     }    /* END for (i) */
+
+#ifdef PENABLE_LINUX26_CPUSETS
+  if(pids != NULL)
+    {
+    free_pidlist(pids);
+    }
+#endif
 
   return(FALSE);
   }  /* END overmem_proc() */

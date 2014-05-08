@@ -174,9 +174,10 @@ int reply_send_svr(
 
       if (LOGLEVEL >= 7)
         {
-        snprintf(log_buf, sizeof(log_buf), 
-          "Reply sent for request type %s on socket %d",
-          reqtype_to_txt(request->rq_type), sfds);
+        snprintf(log_buf, sizeof(log_buf), "Reply sent for request type %s on socket %d",
+          reqtype_to_txt(request->rq_type),
+	  sfds);
+
         log_record(PBSEVENT_JOB, PBS_EVENTCLASS_JOB, __func__, log_buf);
         }
       }
@@ -354,11 +355,14 @@ void req_reject(
     /* NOTE: Don't need this last snprintf() unless another message is concatenated. */
     }
 
-  if ( LOGLEVEL >= 7 ) {
-    snprintf(log_buf, sizeof(log_buf), 
-      "Reject reply code=%d(%s), aux=%d, type=%s, from %s@%s",
-      code, msgbuf, aux, reqtype_to_txt(preq->rq_type),
-      preq->rq_user, preq->rq_host);
+  snprintf(log_buf, sizeof(log_buf), "Reject reply code=%d(%s), aux=%d, type=%s, from %s@%s",
+    code,
+    msgbuf,
+    aux,
+    reqtype_to_txt(preq->rq_type),
+    preq->rq_user,
+    preq->rq_host);
+
   log_event(PBSEVENT_DEBUG,PBS_EVENTCLASS_REQUEST,"req_reject",log_buf);
   }
 

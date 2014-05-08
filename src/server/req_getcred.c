@@ -426,11 +426,6 @@ int pipe_and_read_unmunge(
     snprintf(log_buf, sizeof(log_buf), "get_encode_host returned %d", rc);
     log_err(-1, __func__, log_buf);
     }
-  else
-    {
-    sprintf(log_buf, "get_encode_host returned %d", rc);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
-    }
 
   return(rc);
   } /* END pipe_and_read_unmunge() */
@@ -450,6 +445,11 @@ int unmunge_request(
   char            log_buf[LOCAL_LOG_BUF_SIZE];
   int             fd;
 
+  /* create a unique temporary file for the credential data */
+  snprintf(mungeFileName, sizeof(mungeFileName), "%smunge-XXXXXX", path_credentials);
+  fd = mkstemp(mungeFileName);
+  if (fd == -1)
+    {
   /* create a unique temporary file for the credential data */
   snprintf(mungeFileName, sizeof(mungeFileName), "%smunge-XXXXXX", path_credentials);
   fd = mkstemp(mungeFileName);

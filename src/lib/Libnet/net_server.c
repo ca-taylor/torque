@@ -1134,7 +1134,9 @@ void close_conn(
   int has_mutex) /* I */
 
   {
-  char log_message[LOG_BUF_SIZE];
+  int     count;
+  ssize_t nbytes;
+  char    log_message[LOCAL_LOG_BUF_SIZE];
 
   /* close conn shouldn't be called on local connections */
   if (sd == PBS_LOCAL_CONNECTION)
@@ -1164,7 +1166,7 @@ void close_conn(
 
   if (svr_conn[sd].cn_oncl != NULL)
     {
-    snprintf(log_message, LOG_BUF_SIZE, "Connection %d - func %lx",
+    snprintf(log_message, sizeof(log_message), "Connection %d - func %lx",
       sd, (unsigned long)svr_conn[sd].cn_oncl);
     log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE, __func__, log_message);
 
@@ -1181,7 +1183,26 @@ void close_conn(
     globalset_del_sock(sd);
     }
 
-  close(sd);
+  if ( shutdown(sd, SHUT_WR) ) {
+    snprintf(log_message, sizeof(log_message), "shutdown() -  %s", strerror(errno));
+    log_err(PBSE_NONE, __func__, log_message);
+  }
+
+  count  = 0;
+  nbytes = recv(sd, log_message, 8, MSG_DONTWAIT);
+  while ( (int) nbytes > 0 && count < 5000 ) {
+    nbytes = recv(sd, log_message, 8, MSG_DONTWAIT);
+    count++;
+  }
+  if ( count >= 5000 ) {
+    snprintf(log_message, sizeof(log_message), "Warning: recv() loop reached limit");
+    log_err(PBSE_NONE, __func__, log_message);
+  }
+
+  if ( close(sd) ) {
+    snprintf(log_message, sizeof(log_message), "close() -  %s", strerror(errno));
+    log_err(PBSE_NONE, __func__, log_message);
+  }
 
   svr_conn[sd].cn_addr = 0;
   svr_conn[sd].cn_handle = -1;

@@ -603,11 +603,16 @@ int socket_wait_for_read(
     /* Server timeout reached */
     extern struct connection svr_conn[];
     char ipAddrStr[INET_ADDRSTRLEN];
-
     inet_ntop(AF_INET, &(svr_conn[socket].cn_addr), ipAddrStr, INET_ADDRSTRLEN);
+             ipAddrStr, svr_conn[socket].cn_port, socket, pbs_tcp_timeout);
+=======
+    pbs_net_t cn_addr = htonl(svr_conn[socket].cn_addr);
+    in_port_t cn_port = htons(svr_conn[socket].cn_port);
+
+    inet_ntop(AF_INET, &cn_addr, ipAddrStr, INET_ADDRSTRLEN);
     snprintf(log_buf, sizeof(log_buf), 
              "poll() timed out for %s:%d on socket %d after %d secs", 
-             ipAddrStr, svr_conn[socket].cn_port, socket, pbs_tcp_timeout);
+             ipAddrStr, cn_port, socket, (int) pbs_tcp_timeout);
     log_err(PBSE_TIMEOUT, __func__, log_buf);
     rc = PBSE_TIMEOUT;
     }
