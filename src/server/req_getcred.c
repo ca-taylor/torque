@@ -173,8 +173,8 @@ int get_encode_host(
   ptr = strstr(munge_buf, "ENCODE_HOST:");
   if (!ptr)
     {
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, "could not read unmunge data host");
-    return(-1);
+    log_err(PBSE_SYSTEM, __func__, "could not read unmunge data host");
+    return(PBSE_SYSTEM);
     }
 
   /* Move us to the end of the ENCODE_HOST keyword. There are spaces
@@ -182,7 +182,8 @@ int get_encode_host(
   ptr = strchr(ptr, ':');
   if(ptr == NULL)
     {
-    return (-1);
+    log_err(PBSE_SYSTEM, __func__, "ENCODE_HOST malformed");
+    return(PBSE_SYSTEM);
     }
   ptr++;
   while (*ptr == SPACE)
@@ -200,7 +201,7 @@ int get_encode_host(
 
   strcpy(conn_credent[s].hostname, host_name);
 
-  return(0);
+  return(PBSE_NONE);
   } /* END get_encode_host() */
 
 
@@ -215,13 +216,12 @@ int get_UID(
   char  user_name[PBS_MAXUSER];
   int   i = 0;
 
-
   ptr = strstr(munge_buf, "UID:");
 	if (!ptr)
-		{
-		req_reject(PBSE_SYSTEM, 0, preq, NULL, "could not read unmunge data user");
-		return(-1);
-		}
+	  {
+	  log_err(PBSE_SYSTEM, __func__, "could not read UID from munge buffer");
+	  return(PBSE_SYSTEM);
+	  }
 
 	ptr = strchr(ptr, ':');
 	ptr++;
@@ -263,16 +263,15 @@ int write_munge_temp_file(
 
   if ((cred_size = strlen(preq->rq_ind.rq_authen.rq_cred)) == 0)
     {
-    req_reject(PBSE_BADCRED, 0, preq, NULL, "munge credential invalid");
-    return(-1);
+    log_err(errno, __func__, "munge credential invalid");
+    return(PBSE_SYSTEM);
     }
 
   if ((fd = open(mungeFileName, O_WRONLY|O_NONBLOCK)) < 0)
     {
-    sprintf(log_buf, "could not open temporary munge file %s, errno = %d", 
-	    mungeFileName, errno);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
-    return(-1);
+    snprintf(log_buf, sizeof(log_buf), "could not open temporary munge file %s", mungeFileName);
+    log_err(errno, __func__, log_buf);
+    return(PBSE_SYSTEM);
     }
 
   bytes_written = write_ac_socket(fd, preq->rq_ind.rq_authen.rq_cred, cred_size);
@@ -280,20 +279,20 @@ int write_munge_temp_file(
   if ((bytes_written == -1) || 
       (bytes_written != cred_size))
     {
-    sprintf(log_buf, "could not write credential to temporary munge file %s, errno = %d, bytes_written = %d", 
-	    mungeFileName, errno, bytes_written);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
+    snprintf(log_buf, sizeof(log_buf), "could not write credential to temporary munge file %s, bytes_written = %d", 
+	     mungeFileName, bytes_written);
+    /* errno set by write_ac_socket */
+    log_err(errno, __func__, log_buf);
     close(fd);
-    return(-1);
+    return(PBSE_SOCKET_WRITE);
     }
 
   if ((rc = fsync(fd)) < 0)
     {
-    sprintf(log_buf, "could not fsync temporary munge file %s, errno = %d", 
-	    mungeFileName, errno);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
+      snprintf(log_buf, sizeof(log_buf), "could not fsync temporary munge file %s, rc=%d", mungeFileName, rc);
+    log_err(errno, __func__, log_buf);
     close(fd);
-    return(rc);
+    return(PBSE_SYSTEM);
     }
 
   close(fd);
@@ -324,21 +323,18 @@ int pipe_and_read_unmunge(
   int   errno_save = 0;
   int   flags = 0;
 
-  snprintf(munge_command,sizeof(munge_command),
-    "unmunge --input=%s",
-    mungeFileName);
+  snprintf(munge_command, sizeof(munge_command), "unmunge --input=%s",
+	   mungeFileName);
   
   if ((munge_pipe = popen(munge_command,"r")) == NULL)
     {
     /* FAILURE */
-    snprintf(log_buf,sizeof(log_buf),
-      "Unable to popen command '%s' for reading",
-      munge_command);
+    snprintf(log_buf, sizeof(log_buf), "Unable to popen command '%s' for read",
+	     munge_command);
     log_err(errno, __func__, log_buf);
     
     unlink(mungeFileName);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, "couldn't create pipe to unmunge");
-    return(-1);
+    return(PBSE_CAN_NOT_OPEN_FILE);
     }
   
   memset(munge_buf, 0, MUNGE_SIZE);
@@ -347,17 +343,16 @@ int pipe_and_read_unmunge(
   fd = fileno(munge_pipe);
   if (fd == -1)
     {
-    sprintf(log_buf, "invalid stream for unmunge pipe, errno = %d", errno);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
-    return(-1);
+    log_err(errno, __func__, "invalid stream for unmunge pipe");
+    return(PBSE_SYSTEM);
     }
 
   if ((flags = fcntl(fd, F_GETFL)) == -1)
     {
-    sprintf(log_buf, "cannot get file status flags for unmunge of %s, errno = %d", 
-	    mungeFileName, errno);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
-    return(-1);
+    snprintf(log_buf, sizeof(log_buf), "cannot get file status flags for unmunge of %s", 
+	     mungeFileName);
+    log_err(errno, __func__, log_buf);
+    return(PBSE_SYSTEM);
     }
 
 #if defined(FNDELAY) && !defined(__hpux)
@@ -378,10 +373,10 @@ int pipe_and_read_unmunge(
 #endif
     if (fcntl(fd,F_SETFL,flags) == -1)
       {
-      sprintf(log_buf, "cannot set file status flags to %d for unmunge of %s, errno = %d", 
-	      flags, mungeFileName, errno);
-      req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
-      return(-1);
+      snprintf(log_buf, sizeof(log_buf), "cannot set file status flags to %d for unmunge of %s", 
+	       flags, mungeFileName);
+      log_err(errno, __func__, log_buf);
+      return(PBSE_SYSTEM);
       }
     }
 
@@ -397,11 +392,10 @@ int pipe_and_read_unmunge(
   
   if (bytes_read == -1)
     {
-    /* read failed */
-    sprintf(log_buf, "error reading munge data from %s, errno = %d", 
-	    mungeFileName, errno_save);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
-    rc = -1;
+    /* read failed, errno is set by read_ac_socket */
+    snprintf(log_buf, sizeof(log_buf), "error reading munge data from %s", mungeFileName);
+    log_err(errno_save, __func__, log_buf);
+    rc = PBSE_SOCKET_READ;
     }
   else if (total_bytes_read == 0)
     {
@@ -413,14 +407,24 @@ int pipe_and_read_unmunge(
     int tmp = errno;
     if (errno == ECHILD)
       errno = 0;
-    sprintf(log_buf, "could not unmunge credentials, munge_command=|%s|, errno=%d, last bytes_read=%d, errno_save=%d, flags=%d", 
-	    munge_command, tmp, bytes_read, errno_save, flags);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
-    rc = -1;
+    snprintf(log_buf, sizeof(log_buf), "could not unmunge credentials, munge_command=|%s|, last bytes_read=%d", 
+	     munge_command, bytes_read);
+    log_err(errno_save, __func__, log_buf);
+    rc = PBSE_BADCRED;
     }
   else if ((rc = get_encode_host(sock, munge_buf, preq)) == PBSE_NONE)
     {
     rc = get_UID(sock, munge_buf, preq);
+    if (rc != PBSE_NONE)
+      {
+      snprintf(log_buf, sizeof(log_buf), "get_UID returned %d", rc);
+      log_err(-1, __func__, log_buf);
+      }
+    }
+  else
+    {
+    snprintf(log_buf, sizeof(log_buf), "get_encode_host returned %d", rc);
+    log_err(-1, __func__, log_buf);
     }
   else
     {
@@ -447,23 +451,23 @@ int unmunge_request(
   int             fd;
 
   /* create a unique temporary file for the credential data */
-  sprintf(mungeFileName, "%smunge-XXXXXX", path_credentials);
+  snprintf(mungeFileName, sizeof(mungeFileName), "%smunge-XXXXXX", path_credentials);
   fd = mkstemp(mungeFileName);
   if (fd == -1)
     {
-    sprintf(log_buf, "could not create temporary munge file %s, errno=%d", 
-	    mungeFileName, errno);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
-    return(-1);
+    snprintf(log_buf, sizeof(log_buf), "could not create temporary munge file %s", 
+	     mungeFileName);
+    log_err(errno, __func__, log_buf);
+    return(PBSE_SYSTEM);
     }
 
   rc = close(fd);
   if (rc == -1)
     {
-    sprintf(log_buf, "could not close temporary munge file %s, errno=%d", 
-	    mungeFileName, errno);
-    req_reject(PBSE_SYSTEM, 0, preq, NULL, log_buf);
-    return(-1);
+    snprintf(log_buf, sizeof(log_buf), "could not close temporary munge file %s", 
+	     mungeFileName);
+    log_err(errno, __func__, log_buf);
+    return(PBSE_SYSTEM);
     }
 
   /* Write the munge credential to the newly created file */
@@ -471,22 +475,22 @@ int unmunge_request(
     {
     /* open the munge command as a pipe and read the result */
     rc = pipe_and_read_unmunge(mungeFileName,preq,sock);
-    if (rc < 0)
+    if (rc != PBSE_NONE)
       {
-      sprintf(log_buf, "Error reading munge temp file %s, rc=%d", 
-	      mungeFileName, rc);
-      log_err(-1, __func__, log_buf);
+      snprintf(log_buf, sizeof(log_buf), "Error reading munge temp file %s, rc=%d", 
+	       mungeFileName, rc);
+      log_err(PBSE_SYSTEM, __func__, log_buf);
       }
     }
   else
     {
-      sprintf(log_buf, "Error writing to munge temp file %s, rc=%d", 
-	      mungeFileName, rc);
-      log_err(-1, __func__, log_buf);
+      snprintf(log_buf, sizeof(log_buf), "Error writing munge temp file %s, rc=%d", 
+	       mungeFileName, rc);
+      log_err(PBSE_SYSTEM, __func__, log_buf);
     }
 
   /* delete the old file unless we had a problem */
-  if (rc >= 0)
+  if (rc == PBSE_NONE)
     unlink(mungeFileName);
 
   return(rc);
@@ -655,10 +659,10 @@ int req_altauthenuser(
     }
 
   rc = unmunge_request(s, preq);
-  if (rc)
+  if (rc != PBSE_NONE)
     {
     /* FAILED */
-    req_reject(PBSE_BADCRED, 0, preq, NULL, "cannot authenticate user.  Failed to unmunge request");
+    req_reject(PBSE_BADCRED, 0, preq, NULL, "cannot authenticate user. Failed to unmunge request");
     return(PBSE_BADCRED);
     }
 
