@@ -215,16 +215,12 @@ int tcp_read(
     switch (rc)
       {
       case PBSE_TIMEOUT:
-
         chan->IsTimeout = 1;
-
+	log_err(PBSE_TIMEOUT,__func__,"timeout from socket_read()");
         break;
-
       default:
-
         chan->SelectErrno = rc;
         chan->ReadErrno = rc;
-
         break;
       }
 
@@ -314,11 +310,9 @@ int DIS_tcp_wflush(
   size_t            ct;
   int               i;
   char             *pb = NULL;
-  char             *pbs_debug = NULL;
+  char              log_buf[LOCAL_LOG_BUF_SIZE];
 
   struct tcpdisbuf *tp;
-
-  pbs_debug = getenv("PBSDEBUG");
 
   tp = &chan->writebuf;
   pb = tp->tdis_thebuf;
@@ -334,14 +328,10 @@ int DIS_tcp_wflush(
         }
 
       /* FAILURE */
-
-      if (pbs_debug != NULL)
-        {
-        fprintf(stderr,
-          "TCP write of %d bytes (%.32s) [sock=%d] failed, errno=%d (%s)\n",
-          (int)ct, pb, chan->sock, errno, strerror(errno));
-        }
-      
+      sprintf(log_buf,
+	      "TCP write of %d bytes (%.32s) [sock=%d] failed, errno=%d (%s)\n",
+	      (int)ct, pb, chan->sock, errno, strerror(errno));
+      log_err(PBSE_PROTOCOL, __func__, log_buf);      
       return(-1);
       }  /* END if (i == -1) */
     else
@@ -723,14 +713,44 @@ void DIS_tcp_cleanup(
   }
 
 void DIS_tcp_close(
-    
   struct tcp_chan *chan)
+{
+  int      rc   = 0;
+  int      sock, count;
+  ssize_t  nbytes;
+  char     log_buf[LOCAL_LOG_BUF_SIZE];
 
-  {
-  int sock = chan->sock;
+  sock = chan->sock;
   DIS_tcp_cleanup(chan);
-  if (sock != -1)
-    close(sock);
+
+  if (sock != -1) {
+    if ( shutdown(sock, SHUT_WR) ) {
+      snprintf(log_buf, sizeof(log_buf), "shutdown() -  %s", strerror(errno));
+      log_err(PBSE_NONE, __func__, log_buf);
+    }
+ 
+    count  = 0;
+    nbytes = recv(sock, log_buf, 7, MSG_PEEK | MSG_DONTWAIT);
+    while ( (int) nbytes > 0 && count < 10000 ) {
+      nbytes = recv(sock, log_buf, 7, MSG_PEEK | MSG_DONTWAIT);
+      count++;
+    }
+
+    if ( count >= 10000 ) {
+      snprintf(log_buf, sizeof(log_buf), "Warning: recv() loop reached limit");
+      log_err(PBSE_NONE, __func__, log_buf);
+    }
+
+    if ( close(sock) ) {
+      snprintf(log_buf, sizeof(log_buf), "close() -  %s", strerror(errno));
+      log_err(PBSE_NONE, __func__, log_buf);
+    }
   }
+  else {
+      snprintf(log_buf, sizeof(log_buf), "Warning: chan->sock = -1");
+      log_err(0, __func__, log_buf);
+  }
+  return;
+}
 
 /* END tcp_dis.c */
