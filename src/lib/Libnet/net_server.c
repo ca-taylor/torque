@@ -1137,7 +1137,8 @@ void close_conn(
   int has_mutex) /* I */
 
   {
-  char log_message[LOG_BUF_SIZE];
+  char    log_buf[LOCAL_LOG_BUF_SIZE];
+  char    err_str[LOCAL_LOG_BUF_SIZE];
 
   /* close conn shouldn't be called on local connections */
   if (sd == PBS_LOCAL_CONNECTION)
@@ -1146,8 +1147,8 @@ void close_conn(
   if ((sd < 0) ||
       (max_connection <= sd))
     {
-    snprintf(log_message, sizeof(log_message), "sd is invalid %d!!!", sd);
-    log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_message);
+    snprintf(log_buf, sizeof(log_buf), "sd is invalid %d!!!", sd);
+    log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_buf);
 
     return;
     }
@@ -1167,10 +1168,10 @@ void close_conn(
 
   if (svr_conn[sd].cn_oncl != NULL)
     {
-    snprintf(log_message, sizeof(log_message),
+    snprintf(log_buf, sizeof(log_buf),
       "Closing connection %d and calling its accompanying function on close",
       sd);
-    log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE, __func__, log_message);
+    log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE, __func__, log_buf);
 
     svr_conn[sd].cn_oncl(sd);
     }
@@ -1185,7 +1186,10 @@ void close_conn(
     globalset_del_sock(sd);
     }
 
-  close(sd);
+  if ( close(sd) ) {
+    snprintf(log_buf, sizeof(log_buf), "close() -  %s", strerror_r(errno, err_str, sizeof(err_str)));
+    log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE | PBS_EVENTCLASS_SERVER, __func__, log_buf);
+  }
 
   svr_conn[sd].cn_addr = 0;
   svr_conn[sd].cn_handle = -1;
@@ -1219,7 +1223,7 @@ void clear_conn(
   int has_mutex) /* I */
 
   {
-  char log_message[LOG_BUF_SIZE];
+  char log_buf[LOCAL_LOG_BUF_SIZE];
 
   /* close conn shouldn't be called on local connections */
   if (sd == PBS_LOCAL_CONNECTION)
@@ -1228,8 +1232,8 @@ void clear_conn(
   if ((sd < 0) ||
       (max_connection <= sd))
     {
-    snprintf(log_message, sizeof(log_message), "sd is invalid %d!!!", sd);
-    log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_message);
+    snprintf(log_buf, sizeof(log_buf), "sd is invalid %d!!!", sd);
+    log_event(PBSEVENT_SYSTEM,PBS_EVENTCLASS_NODE,__func__,log_buf);
 
     return;
     }

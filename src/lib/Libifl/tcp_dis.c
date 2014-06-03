@@ -317,6 +317,8 @@ int DIS_tcp_wflush(
   char             *pbs_debug = NULL;
 
   struct tcpdisbuf *tp;
+  char              log_buf[LOCAL_LOG_BUF_SIZE];
+  char              err_str[LOCAL_LOG_BUF_SIZE];
 
   pbs_debug = getenv("PBSDEBUG");
 
@@ -337,9 +339,10 @@ int DIS_tcp_wflush(
 
       if (pbs_debug != NULL)
         {
-        fprintf(stderr,
+        snprintf(log_buf, sizeof(log_buf),
           "TCP write of %d bytes (%.32s) [sock=%d] failed, errno=%d (%s)\n",
-          (int)ct, pb, chan->sock, errno, strerror(errno));
+          (int)ct, pb, chan->sock, errno, strerror_r(errno, err_str, sizeof(err_str)));
+        log_err(errno, __func__, log_buf);
         }
       
       return(-1);
@@ -723,14 +726,29 @@ void DIS_tcp_cleanup(
   }
 
 void DIS_tcp_close(
-    
   struct tcp_chan *chan)
+{
+  int      rc;
+  int      sock;
+  char     log_buf[LOCAL_LOG_BUF_SIZE];
+  char     err_str[LOCAL_LOG_BUF_SIZE];
 
-  {
-  int sock = chan->sock;
+  rc   = 0;
+  sock = chan->sock;
+
   DIS_tcp_cleanup(chan);
-  if (sock != -1)
-    close(sock);
+
+  if (sock != -1) {
+    if ( close(sock) ) {
+      snprintf(log_buf, sizeof(log_buf), "close() -  %s", strerror_r(errno, err_str, sizeof(err_str)));
+      log_err(errno, __func__, log_buf);
+    }
   }
+  else {
+      snprintf(log_buf, sizeof(log_buf), "Warning: chan->sock = -1");
+      log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE | PBS_EVENTCLASS_SERVER, __func__, log_buf);
+  }
+  return;
+}
 
 /* END tcp_dis.c */
