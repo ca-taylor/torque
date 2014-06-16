@@ -88,6 +88,9 @@
 #include "mom_job_cleanup.h"
 
 #include "mcom.h"
+#if defined(NVIDIA_GPUS) && defined(NVML_API)
+#include "nvml.h"
+#endif  /* NVIDIA_GPUS and NVML_API */
 #include "mom_server_lib.h" /* shutdown_to_server */
 
 #ifdef NOPOSIXMEMLOCK
