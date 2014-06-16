@@ -215,16 +215,12 @@ int tcp_read(
     switch (rc)
       {
       case PBSE_TIMEOUT:
-
         chan->IsTimeout = 1;
-
+	log_err(PBSE_TIMEOUT,__func__,"timeout from socket_read()");
         break;
-
       default:
-
         chan->SelectErrno = rc;
         chan->ReadErrno = rc;
-
         break;
       }
 

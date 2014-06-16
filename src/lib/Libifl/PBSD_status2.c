@@ -88,6 +88,7 @@
 #include "libpbs.h"
 #include "dis.h"
 #include "mutex_mgr.hpp"
+#include "log.h"
 
 
 int PBSD_status_put(
@@ -102,6 +103,7 @@ int PBSD_status_put(
   int rc = 0;
   int sock;
   struct tcp_chan *chan = NULL;
+  char   log_buf[LOG_BUF_SIZE];
 
   mutex_mgr ch_mutex = mutex_mgr(connection[c].ch_mutex, false);
 
@@ -127,6 +129,10 @@ int PBSD_status_put(
   if (DIS_tcp_wflush(chan))
     {
     rc = PBSE_PROTOCOL;
+    snprintf(log_buf, sizeof(log_buf), "Sending status request for job %s: Returning %d.", id, rc);
+    log_err(rc, __func__, log_buf);
+    DIS_tcp_cleanup(chan);
+    return(rc);
     }
 
   /* success */
