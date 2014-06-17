@@ -4586,12 +4586,11 @@ int procs_requested(
     } while(*str++ == '+');
   
   free(tmp_spec);
+  if (prop != NULL)
+    free_prop(prop);
   
   return(total_procs);
   } /* END procs_requested() */
-
-
-
 
 
 /*
