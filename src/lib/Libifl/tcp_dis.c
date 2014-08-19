@@ -215,12 +215,16 @@ int tcp_read(
     switch (rc)
       {
       case PBSE_TIMEOUT:
+
         chan->IsTimeout = 1;
-	log_err(PBSE_TIMEOUT,__func__,"timeout from socket_read()");
+
         break;
+
       default:
+
         chan->SelectErrno = rc;
         chan->ReadErrno = rc;
+
         break;
       }
 
@@ -313,8 +317,6 @@ int DIS_tcp_wflush(
   char             *pbs_debug = NULL;
 
   struct tcpdisbuf *tp;
-  char              log_buf[LOCAL_LOG_BUF_SIZE];
-  char              err_str[LOCAL_LOG_BUF_SIZE];
 
   pbs_debug = getenv("PBSDEBUG");
 
@@ -335,10 +337,9 @@ int DIS_tcp_wflush(
 
       if (pbs_debug != NULL)
         {
-        snprintf(log_buf, sizeof(log_buf),
+        fprintf(stderr,
           "TCP write of %d bytes (%.32s) [sock=%d] failed, errno=%d (%s)\n",
-          (int)ct, pb, chan->sock, errno, strerror_r(errno, err_str, sizeof(err_str)));
-        log_err(errno, __func__, log_buf);
+          (int)ct, pb, chan->sock, errno, strerror(errno));
         }
       
       return(-1);
@@ -722,29 +723,26 @@ void DIS_tcp_cleanup(
   }
 
 void DIS_tcp_close(
+    
   struct tcp_chan *chan)
-{
-  int      rc;
-  int      sock;
-  char     log_buf[LOCAL_LOG_BUF_SIZE];
-  char     err_str[LOCAL_LOG_BUF_SIZE];
 
-  rc   = 0;
-  sock = chan->sock;
-
+  {
+  char log_buf[LOCAL_LOG_BUF_SIZE];
+  int sock = chan->sock;
   DIS_tcp_cleanup(chan);
-
-  if (sock != -1) {
-    if ( close(sock) ) {
-      snprintf(log_buf, sizeof(log_buf), "close() -  %s", strerror_r(errno, err_str, sizeof(err_str)));
-      log_err(errno, __func__, log_buf);
+  if (sock != -1)
+    {
+    if (close(sock))
+      {
+      snprintf(log_buf, sizeof(log_buf), "close() - %s", strerror(errno));
+      log_err(PBSE_NONE, __func__, log_buf);
+      }
+    }
+  else
+    {
+    snprintf(log_buf, sizeof(log_buf), "Warning: chan->sock = -1");
+    log_err(0, __func__, log_buf); 
     }
   }
-  else {
-      snprintf(log_buf, sizeof(log_buf), "Warning: chan->sock = -1");
-      log_event(PBSEVENT_SYSTEM, PBS_EVENTCLASS_NODE | PBS_EVENTCLASS_SERVER, __func__, log_buf);
-  }
-  return;
-}
 
 /* END tcp_dis.c */
