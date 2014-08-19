@@ -433,7 +433,7 @@ void track_save(struct work_task *pwt)
   exit(1);
   }
 
-void acct_close(void)
+void acct_close(bool b)
   {
   fprintf(stderr, "The call to acct_close needs to be mocked!!\n");
   exit(1);
@@ -451,7 +451,7 @@ int svr_save(struct server *ps, int mode)
   exit(1);
   }
 
-int acct_open(char *filename)
+int acct_open(char *filename, bool b)
   {
   fprintf(stderr, "The call to acct_open needs to be mocked!!\n");
   exit(1);

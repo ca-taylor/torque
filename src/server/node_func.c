@@ -1492,7 +1492,14 @@ int add_execution_slot(
   
   pnode->nd_slots.add_execution_slot();
 
-  if ((pnode->nd_state & INUSE_JOB) != 0)
+  bool job_exclusive_onuse = false;
+
+  if ((server.sv_attr[SRV_ATR_JobExclusiveOnUse].at_flags & ATR_VFLAG_SET) &&
+      (server.sv_attr[SRV_ATR_JobExclusiveOnUse].at_val.at_long != 0))
+    job_exclusive_onuse = true;
+
+  if (((pnode->nd_state & INUSE_JOB) != 0) &&
+       (!job_exclusive_onuse))
     pnode->nd_state &= ~INUSE_JOB;
 
   return(PBSE_NONE);

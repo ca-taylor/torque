@@ -206,6 +206,10 @@ enum srv_atr
   SRV_ATR_job_sync_timeout,
 
 #include "site_svr_attr_enum.h"
+  
+  SRV_ATR_CopyOnRerun,
+  SRV_ATR_JobExclusiveOnUse,
+
   /* This must be last */
   SRV_ATR_LAST
   };
