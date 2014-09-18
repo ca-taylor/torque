@@ -580,6 +580,7 @@ int socket_wait_for_read(
   int           rc = PBSE_NONE;
   int           ret;
   struct pollfd pfd;
+  char   log_buf[LOCAL_LOG_BUF_SIZE];
 
   pfd.fd = socket;
   pfd.events = POLLIN | POLLHUP; /* | POLLRDNORM; */
@@ -592,12 +593,25 @@ int socket_wait_for_read(
     if (recv(socket, buf, 7, MSG_PEEK | MSG_DONTWAIT) == 0)
       {
       /* This will only occur when the socket has closed */
+      snprintf(log_buf, LOCAL_LOG_BUF_SIZE, 
+             "socket %d was closed", pfd.fd);
+      log_err(PBSE_SOCKET_CLOSE, __func__, log_buf);
       rc = PBSE_SOCKET_CLOSE;
       }
     }
   else if (ret == 0)
     {
     /* Server timeout reached */
+    extern struct connection svr_conn[];
+    char ipAddrStr[INET_ADDRSTRLEN];
+    pbs_net_t cn_addr = htonl(svr_conn[socket].cn_addr);
+    in_port_t cn_port = htons(svr_conn[socket].cn_port);
+
+    inet_ntop(AF_INET, &cn_addr, ipAddrStr, INET_ADDRSTRLEN);
+    snprintf(log_buf, sizeof(log_buf), 
+             "poll() timed out for %s:%d on socket %d after %d secs", 
+             ipAddrStr, cn_port, socket, (int) pbs_tcp_timeout);
+    log_err(PBSE_TIMEOUT, __func__, log_buf);
     rc = PBSE_TIMEOUT;
     }
   else /* something bad happened to poll */
