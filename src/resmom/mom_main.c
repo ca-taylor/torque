@@ -116,6 +116,7 @@ int    MOMIsPLocked = 0;
 int    ServerStatUpdateInterval = DEFAULT_SERVER_STAT_UPDATES;
 int    CheckPollTime            = CHECK_POLL_TIME;
 int    ForceServerUpdate = 0;
+int    FatalJobPollFailure = 1;
 
 int    verbositylevel = 0;
 double cputfactor = 1.00;
@@ -400,6 +401,7 @@ extern unsigned long mom_checkpoint_set_checkpoint_run_exe_name(const char *);
 static unsigned long setdownonerror(const char *);
 static unsigned long setstatusupdatetime(const char *);
 static unsigned long setcheckpolltime(const char *);
+static unsigned long setfataljobpollfailure(const char *);
 static unsigned long settmpdir(const char *);
 static unsigned long setlogfilemaxsize(const char *);
 static unsigned long setlogfilerolldepth(const char *);
@@ -484,6 +486,7 @@ static struct specials
   { "down_on_error",       setdownonerror },
   { "status_update_time",  setstatusupdatetime },
   { "check_poll_time",     setcheckpolltime },
+  { "fatal_job_poll_failure", setfataljobpollfailure }, 
   { "tmpdir",              settmpdir },
   { "log_directory",       setlogdirectory },
   { "log_file_max_size",   setlogfilemaxsize },
@@ -2112,6 +2115,59 @@ static u_long setdownonerror(
 
   return(1);
   }  /* END setdownonerror() */
+
+
+
+static u_long setfataljobpollfailure(
+
+  const char *Value)  /* I */
+
+  {
+  static char   id[] = "setfataljobpollfailure";
+  int           enable = -1;
+
+  log_record(PBSEVENT_SYSTEM,PBS_EVENTCLASS_SERVER,id,Value);
+
+  if (Value == NULL)
+    {
+    /* FAILURE */
+
+    return(0);
+    }
+
+  /* accept various forms of "true", "yes", and "1" */
+  switch (Value[0])
+    {
+    case 't':
+    case 'T':
+    case 'y':
+    case 'Y':
+    case '1':
+
+      enable = 1;
+    
+      break;
+
+  /* accept various forms of "false", "no", and "0" */
+    case 'f':
+    case 'F':
+    case 'n':
+    case 'N':
+    case '0':
+
+      enable = 0;
+    
+      break;
+
+    }
+
+  if (enable != -1)
+    {
+    FatalJobPollFailure = enable;
+    }
+
+  return(1);
+  }  /* END setfataljobpollfailure() */
 
 
 
@@ -5529,6 +5585,25 @@ void set_report_check_poll_time(
   } /* set_report_check_poll_time() */
 
 
+/*
+ *  * set_report_fatal_job_poll_failure()
+ *  * @pre-cond: curr points to a valid character pointer
+ *  */
+
+void set_report_fatal_job_poll_failure(
+
+  std::stringstream &output,
+  char              *curr)
+
+  {
+  if ((*curr == '=') && ((*curr) + 1 != '\0'))
+    {
+    setfataljobpollfailure(curr+1);
+    }
+
+  output << "fatal_job_poll_failure=" << FatalJobPollFailure;
+  } /* set_report_fatal_job_poll_failure() */
+
 
 /*
  * set_report_job_start_block_time()
@@ -5829,6 +5904,10 @@ int process_rm_cmd_request(
       else if (!strncasecmp(name, "check_poll_time", strlen("check_poll_time")))
         {
         set_report_check_poll_time(output, curr);
+        }
+      else if (!strncasecmp(name, "fatal_job_poll_failure", strlen("fatal_job_poll_failure")))
+        {
+        set_report_fatal_job_poll_failure(output, curr);
         }
       else if (!strncasecmp(name, "jobstartblocktime", strlen("jobstartblocktime")))
         {
