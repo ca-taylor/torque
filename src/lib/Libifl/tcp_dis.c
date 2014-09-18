@@ -215,16 +215,12 @@ int tcp_read(
     switch (rc)
       {
       case PBSE_TIMEOUT:
-
         chan->IsTimeout = 1;
-
+	log_err(PBSE_TIMEOUT,__func__,"timeout from socket_read()");
         break;
-
       default:
-
         chan->SelectErrno = rc;
         chan->ReadErrno = rc;
-
         break;
       }
 
@@ -314,11 +310,9 @@ int DIS_tcp_wflush(
   size_t            ct;
   int               i;
   char             *pb = NULL;
-  char             *pbs_debug = NULL;
+  char              log_buf[LOCAL_LOG_BUF_SIZE];
 
   struct tcpdisbuf *tp;
-
-  pbs_debug = getenv("PBSDEBUG");
 
   tp = &chan->writebuf;
   pb = tp->tdis_thebuf;
@@ -334,14 +328,10 @@ int DIS_tcp_wflush(
         }
 
       /* FAILURE */
-
-      if (pbs_debug != NULL)
-        {
-        fprintf(stderr,
-          "TCP write of %d bytes (%.32s) [sock=%d] failed, errno=%d (%s)\n",
-          (int)ct, pb, chan->sock, errno, strerror(errno));
-        }
-      
+      sprintf(log_buf,
+	      "TCP write of %d bytes (%.32s) [sock=%d] failed, errno=%d (%s)\n",
+	      (int)ct, pb, chan->sock, errno, strerror(errno));
+      log_err(PBSE_PROTOCOL, __func__, log_buf);      
       return(-1);
       }  /* END if (i == -1) */
     else
