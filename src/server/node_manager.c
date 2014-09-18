@@ -4590,6 +4590,8 @@ int procs_requested(
     total_procs += num_procs * num_nodes;
     } while(*str++ == '+');
   
+  if (prop != NULL)
+    free_prop(prop);
   free(tmp_spec);
   
   return(total_procs);
